@@ -1,0 +1,150 @@
+# Pre-Migration Environment Variables Snapshot
+# Date: 2026-03-01
+# Source: src/config.py (Pydantic Settings)
+
+# =============================================================================
+# Application
+# =============================================================================
+APP_NAME=AI-Agent-Directus-FastMCP-FullStack
+APP_VERSION=0.1.0
+APP_ENV=development
+DEBUG=false
+LOG_LEVEL=INFO
+
+# =============================================================================
+# FastAPI
+# =============================================================================
+FASTAPI_HOST=0.0.0.0
+FASTAPI_PORT=8000
+FASTAPI_WORKERS=1
+FASTAPI_RELOAD=true
+METRICS_ENDPOINT=/metrics
+
+# =============================================================================
+# FastMCP
+# =============================================================================
+FASTMCP_AGENT_ENDPOINT=/agent
+FASTMCP_AUTO_REGISTER_TOOLS=true
+
+# =============================================================================
+# Directus (SQLite Backend - Pre-Migration)
+# =============================================================================
+DIRECTUS_URL=http://localhost:8055
+DIRECTUS_TOKEN=
+DIRECTUS_DATABASE=sqlite
+DIRECTUS_DATABASE_PATH=artifacts/data.db
+DIRECTUS_BOOTSTRAP_MODELS=artifacts/models.json
+DIRECTUS_AUTH_SOURCE_OF_TRUTH=true
+
+# =============================================================================
+# Cognee RAG (SQLite Backend - Pre-Migration)
+# =============================================================================
+COGNEE_EMBEDDING_MODEL=all-MiniLM-L6-v2
+COGNEE_VECTOR_STORE=artifacts/embeddings.db
+COGNEE_AUTO_CONTEXT_WINDOW=true
+COGNEE_SIMILARITY_THRESHOLD=0.7
+COGNEE_MAX_RESULTS=10
+
+# =============================================================================
+# UI
+# =============================================================================
+UI_DEFAULT=gradio
+GRADIO_SERVER_NAME=0.0.0.0
+GRADIO_SERVER_PORT=7860
+STREAMLIT_SERVER_PORT=8501
+STREAMLIT_SERVER_ADDRESS=0.0.0.0
+
+# =============================================================================
+# External APIs (Secrets - Not Set)
+# =============================================================================
+# OPENAI_API_KEY=
+# ANTHROPIC_API_KEY=
+# HUGGINGFACE_TOKEN=
+
+# =============================================================================
+# Observability
+# =============================================================================
+PROMETHEUS_ENABLED=true
+PROMETHEUS_PORT=9090
+GRAFANA_ENABLED=true
+GRAFANA_PORT=3000
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=admin
+SCRAPE_TARGETS=api.example.com/metrics
+
+# =============================================================================
+# Security
+# =============================================================================
+SECRET_KEY=change-me-in-production
+ALLOWED_HOSTS=localhost,127.0.0.1
+CORS_ORIGINS=http://localhost
+
+# =============================================================================
+# Podman
+# =============================================================================
+PODMAN_USE_SECRETS=true
+PODMAN_NETWORK_EDGE=edge_net
+PODMAN_NETWORK_APP=app_net
+PODMAN_NETWORK_DB=db_net
+
+# =============================================================================
+# Database (PostgreSQL - Post-Migration Target)
+# =============================================================================
+DATABASE_URL=
+DATABASE_POOL_SIZE=10
+DATABASE_MAX_OVERFLOW=20
+
+# =============================================================================
+# Cache
+# =============================================================================
+CACHE_ENABLED=true
+CACHE_TTL=300
+CACHE_MAX_SIZE=1000
+
+# =============================================================================
+# Rate Limiting
+# =============================================================================
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_REQUESTS=100
+RATE_LIMIT_WINDOW=60
+
+# =============================================================================
+# Neo4j Graph Database (PostGIS Migration - New)
+# =============================================================================
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=
+NEO4J_DATABASE=neo4j
+NEO4J_MAX_POOL_SIZE=50
+NEO4J_CONNECTION_TIMEOUT=30
+
+# =============================================================================
+# LanceDB Vector Store (New)
+# =============================================================================
+LANCEDB_URI=artifacts/vector_store.lance
+LANCEDB_DIMENSION=384
+
+# =============================================================================
+# Migration Feature Flags
+# =============================================================================
+USE_GRAPH_MEMORY=false
+USE_NEO4J_SPATIAL=false
+POSTGIS_FALLBACK=false
+
+# =============================================================================
+# Migration Notes
+# =============================================================================
+# Before Migration:
+#   - DIRECTUS_DATABASE=sqlite (directus_database_path: artifacts/data.db)
+#   - COGNEE_VECTOR_STORE=artifacts/embeddings.db
+#
+# After Migration:
+#   - DIRECTUS_DATABASE=postgres (via DATABASE_URL)
+#   - Vector store: LanceDB (LANCEDB_URI)
+#   - Graph store: Neo4j (NEO4J_URI)
+#
+# Feature Flags:
+#   - USE_GRAPH_MEMORY=false (will be true after migration)
+#   - USE_NEO4J_SPATIAL=false (will be true after migration)
+#   - POSTGIS_FALLBACK=false (set to true for rollback)
+# =============================================================================

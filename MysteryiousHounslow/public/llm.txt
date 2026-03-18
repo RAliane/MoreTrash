@@ -1,0 +1,215 @@
+# Matchgorithm - AI-Powered Matching Platform
+
+## Product Overview
+Matchgorithm is an advanced AI-powered matching platform designed to connect professionals with ideal collaborators, business opportunities, and talent matches. The platform leverages sophisticated algorithms to analyze profiles, skills, and objectives to generate highly accurate matches.
+
+## Core Features
+
+### AI Matcher Engine
+- Advanced document parsing that extracts skills, experience, and qualifications
+- Intelligent profile analysis using natural language processing
+- Compatibility scoring based on multiple dimensions
+- Real-time matching capabilities
+
+### Collaboration Solutions
+- Professional networking with verified profiles
+- Project-based collaboration features
+- Skill-based team formation
+- Cross-industry opportunity matching
+
+### Recruitment Platform
+- Automated candidate matching for job roles
+- Skills assessment integration
+- Hiring pipeline management
+- Applicant tracking system (ATS)
+
+### Enterprise Features
+- API integration for custom workflows
+- Custom matching algorithms
+- White-label solutions available
+- Analytics and reporting dashboard
+
+## Technical Architecture
+
+### Frontend
+- Built with Next.js 16 (App Router)
+- React 19+ for UI components
+- TailwindCSS for styling
+- TypeScript for type safety
+
+### Backend
+- Node.js API routes for real-time processing
+- Document parsing and analysis APIs
+- Webhook integration with n8n for automation
+- Admin analytics dashboard
+
+### Integrations
+- Supabase for authentication and database
+- Directus CMS for content management
+- DuckDB for advanced analytics and reporting
+- n8n for workflow automation
+- Vercel for hosting and deployment
+
+### Database
+- Supabase PostgreSQL for transactional data
+- DuckDB for analytics and reporting
+- User profiles and matching history
+- Admin audit logs
+
+## Use Cases
+
+### Talent Recruitment
+- Automated candidate screening
+- Skills-based matching
+- Reduction in hiring time
+- Improved candidate quality
+
+### Business Development
+- B2B partnership opportunities
+- Investor-startup connections
+- Strategic alliance identification
+- Market expansion opportunities
+
+### Education & Academia
+- Student-mentor matching
+- Research collaboration
+- University partnership opportunities
+- Academic resource sharing
+
+### Freelance & Gig Economy
+- Project-freelancer matching
+- Skill-based hiring
+- Quality assurance through AI
+- Fast project fulfillment
+
+## Platform Pages
+
+- **Home** (/) - Product overview and value proposition
+- **Platform** (/platform) - Feature showcase and capabilities
+- **Pricing** (/pricing) - Subscription plans
+- **Solutions** (/solutions) - Industry-specific use cases
+- **Blog** (/blog) - Industry insights and updates
+- **About** (/about) - Company mission and team
+- **Docs** (/docs) - User documentation and guides
+- **API Docs** (/api-docs) - Developer API reference
+- **Contact** (/contact) - Support and inquiry form
+- **Privacy** (/privacy) - Data protection policy
+- **Terms** (/terms) - Service terms and conditions
+
+## API Endpoints
+
+### Document Processing
+- `POST /api/documents/parse` - Parse and extract data from documents
+- `POST /api/documents/upload` - Upload and store documents
+
+### Matching Engine
+- `POST /api/matcher/analyze` - Analyze user profile
+- `POST /api/matcher/compare` - Compare two profiles
+- `GET /api/matcher/results` - Retrieve match results
+
+### User Management
+- `POST /api/auth/sign-up` - Create new user account
+- `POST /api/auth/sign-in` - Authenticate user
+- `POST /api/auth/sign-out` - End user session
+- `GET /api/users/profile` - Get user profile
+- `PUT /api/users/profile` - Update user profile
+
+### Analytics
+- `GET /api/analytics/stats` - Platform statistics
+- `GET /api/analytics/duckdb` - Advanced analytics queries
+- `POST /api/analytics/export` - Export analytics data
+
+### Automation
+- `POST /api/workflows/trigger` - Trigger n8n workflow
+- `GET /api/workflows/campaigns` - Manage email campaigns
+- `POST /api/workflows/automations` - Configure automations
+
+## Getting Started
+
+### For Users
+1. Sign up at https://www.matchgorithm.co.uk/auth/sign-up
+2. Complete your profile with skills and objectives
+3. Upload relevant documents (resume, portfolio)
+4. Review AI-generated matches
+5. Connect with matched profiles
+
+### For Developers
+1. Review API documentation at /api-docs
+2. Generate API keys from dashboard settings
+3. Implement authentication using OAuth 2.0
+4. Integrate matching endpoints into your application
+5. Use webhooks for real-time notifications
+
+## Pricing
+
+### Starter Plan
+- $29/month
+- Up to 50 matches per month
+- Basic analytics
+- Email support
+
+### Professional Plan
+- $99/month (Most Popular)
+- Unlimited matches
+- Advanced analytics
+- Priority support
+- API access
+
+### Enterprise Plan
+- Custom pricing
+- White-label option
+- Dedicated account manager
+- Custom integrations
+- SLA guarantee
+
+## Security & Compliance
+
+- End-to-end encryption for sensitive data
+- GDPR compliant data handling
+- SOC 2 Type II certification
+- Regular security audits
+- Data backup and disaster recovery
+
+## Support Channels
+
+- Email: support@matchgorithm.co.uk
+- Live chat: Available on platform
+- Documentation: https://www.matchgorithm.co.uk/docs
+- API Support: https://www.matchgorithm.co.uk/api-docs
+
+## Technologies Used
+
+### Frontend
+- Next.js 16
+- React 19
+- TailwindCSS v4
+- TypeScript
+- Shadcn/UI components
+
+### Backend & Infrastructure
+- Node.js
+- Next.js API Routes
+- Vercel Deployment
+- Vercel Analytics
+
+### Third-Party Services
+- Supabase (Auth & Database)
+- Directus (CMS)
+- DuckDB (Analytics)
+- n8n (Automation)
+- Vercel (Hosting)
+
+## Contributing
+
+To contribute to Matchgorithm, please refer to our development guidelines and code standards in the documentation.
+
+## License
+
+Matchgorithm platform and code are proprietary. All rights reserved.
+
+## Contact
+
+- Website: https://www.matchgorithm.co.uk
+- Email: hello@matchgorithm.co.uk
+- Twitter: @matchgorithm
+- LinkedIn: /company/matchgorithm

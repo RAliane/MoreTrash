@@ -1,0 +1,132 @@
+version: '3.9'
+
+services:
+  # Postgres 13 Database
+  postgres:
+    image: postgres:13-alpine
+    container_name: matchgorithm-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-matchgorithm}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - matchgorithm-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Directus CMS
+  directus:
+    image: directus/directus:latest
+    container_name: matchgorithm-directus
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_CLIENT: postgres
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${POSTGRES_DB:-matchgorithm}
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      DIRECTUS_AUTH_PROVIDERS: google,github
+      DIRECTUS_AUTH_DEFAULT_ROLE_ID: ${DIRECTUS_DEFAULT_ROLE:-3d9e63d8-892f-472f-a58f-cb37be77588c}
+      DIRECTUS_SECRET: ${DIRECTUS_SECRET:-directus-secret-key}
+      DIRECTUS_URL: ${DIRECTUS_URL:-http://localhost:8055}
+      ADMIN_EMAIL: ${DIRECTUS_ADMIN_EMAIL:-admin@matchgorithm.co.uk}
+      ADMIN_PASSWORD: ${DIRECTUS_ADMIN_PASSWORD:-changeme}
+    volumes:
+      - directus_uploads:/directus/uploads
+      - directus_extensions:/directus/extensions
+    ports:
+      - "8055:8055"
+    networks:
+      - matchgorithm-network
+    restart: unless-stopped
+
+  # n8n Workflow Automation
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: matchgorithm-n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_TYPE: postgres
+      DB_POSTGRESDB: ${POSTGRES_DB:-matchgorithm}
+      DB_POSTGRESHOST: postgres
+      DB_POSTGRESPORT: 5432
+      DB_POSTGRESUSER: ${POSTGRES_USER:-postgres}
+      DB_POSTGRESPASSWORD: ${POSTGRES_PASSWORD:-password}
+      N8N_HOST: ${N8N_HOST:-0.0.0.0}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: https
+      NODE_ENV: production
+      WEBHOOK_TUNNEL_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678}
+    volumes:
+      - n8n_data:/root/.n8n
+    ports:
+      - "5678:5678"
+    networks:
+      - matchgorithm-network
+    restart: unless-stopped
+
+  # Next.js Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: matchgorithm-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      directus:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-matchgorithm}
+      DIRECTUS_URL: ${DIRECTUS_URL:-http://directus:8055}
+      DIRECTUS_TOKEN: ${DIRECTUS_TOKEN}
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://n8n:5678}
+      N8N_API_URL: ${N8N_API_URL:-http://n8n:5678/api}
+    ports:
+      - "3000:3000"
+    networks:
+      - matchgorithm-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: matchgorithm-nginx
+    depends_on:
+      - app
+      - directus
+      - n8n
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - matchgorithm-network
+    restart: unless-stopped
+
+networks:
+  matchgorithm-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  directus_uploads:
+  directus_extensions:
+  n8n_data:

@@ -1,0 +1,229 @@
+# Render Blueprint for AI Agent Deployment
+# Deploy the full AI agent stack with PostgreSQL, Neo4j, and Directus
+# Usage: render blueprint apply render.yaml
+
+services:
+  # Main AI Agent API Service
+  - type: web
+    name: ai-agent-api
+    runtime: python
+    plan: standard
+    buildCommand: pip install uv && uv pip install --system -e "."
+    startCommand: uvicorn src.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-agent-postgres
+          property: connectionString
+      - key: NEO4J_URI
+        fromService:
+          type: pserv
+          name: ai-agent-neo4j
+          property: host
+      - key: NEO4J_USER
+        value: neo4j
+      - key: NEO4J_PASSWORD
+        fromService:
+          type: pserv
+          name: ai-agent-neo4j
+          property: password
+      - key: DIRECTUS_URL
+        fromService:
+          type: web
+          name: ai-agent-directus
+          property: url
+      - key: DIRECTUS_TOKEN
+        sync: false
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: USE_XGBOOST_RANKING
+        value: "true"
+      - key: LLM_PROVIDER
+        value: ollama
+      - key: LLM_MODEL
+        value: llama2
+      - key: SECRET_KEY
+        generateValue: true
+      # Cognee integration
+      - key: COGNEE_ENABLED
+        value: "true"
+      - key: COGNEE_HOST
+        fromService:
+          type: pserv
+          name: ai-agent-cognee
+          property: host
+      - key: COGNEE_PORT
+        value: "8000"
+      - key: COGNEE_VECTOR_STORE
+        value: /tmp/cognee_vectors
+    numInstances: 1
+
+  # Neo4j Private Service (not publicly accessible)
+  - type: pserv
+    name: ai-agent-neo4j
+    runtime: docker
+    plan: standard
+    dockerfilePath: ./deploy/neo4j/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: NEO4J_AUTH
+        generateValue: true
+      - key: NEO4J_dbms_memory_heap_initial__size
+        value: 512m
+      - key: NEO4J_dbms_memory_heap_max__size
+        value: 1G
+      - key: NEO4J_dbms_memory_pagecache_size
+        value: 512m
+      - key: NEO4J_PLUGINS
+        value: '["apoc", "gds"]'
+    disk:
+      name: neo4j-data
+      mountPath: /data
+      sizeGB: 10
+    numInstances: 1
+
+  # Cognee Memory Service
+  - type: pserv
+    name: ai-agent-cognee
+    runtime: docker
+    plan: standard
+    dockerfilePath: ./external/cognee/Dockerfile
+    dockerContext: ./external/cognee
+    envVars:
+      - key: COGNEE_VECTOR_STORE
+        value: /data/vectors
+      - key: COGNEE_EMBEDDING_MODEL
+        value: all-MiniLM-L6-v2
+      - key: COGNEE_AUTO_CONTEXT_WINDOW
+        value: "true"
+      - key: COGNEE_LOG_LEVEL
+        value: INFO
+      - key: NEO4J_URI
+        fromService:
+          type: pserv
+          name: ai-agent-neo4j
+          property: host
+      - key: NEO4J_USER
+        value: neo4j
+      - key: NEO4J_PASSWORD
+        fromService:
+          type: pserv
+          name: ai-agent-neo4j
+          property: password
+    disk:
+      name: cognee-data
+      mountPath: /data
+      sizeGB: 5
+    numInstances: 1
+
+  # Directus CMS Service
+  - type: web
+    name: ai-agent-directus
+    runtime: docker
+    plan: standard
+    dockerfilePath: ./deploy/directus/Dockerfile
+    dockerContext: .
+    healthCheckPath: /server/health
+    envVars:
+      - key: DB_CLIENT
+        value: pg
+      - key: DB_CONNECTION_STRING
+        fromDatabase:
+          name: ai-agent-directus-postgres
+          property: connectionString
+      - key: KEY
+        generateValue: true
+      - key: SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        value: admin@ai-agent.local
+      - key: ADMIN_PASSWORD
+        generateValue: true
+      - key: PORT
+        value: "8055"
+      - key: PUBLIC_URL
+        fromService:
+          type: web
+          name: ai-agent-directus
+          property: url
+      - key: CORS_ENABLED
+        value: "true"
+      - key: CORS_ORIGIN
+        value: "true"
+    numInstances: 1
+
+  # Background job worker for course processing
+  - type: worker
+    name: ai-agent-worker
+    runtime: python
+    plan: starter
+    buildCommand: pip install uv && uv pip install --system -e "."
+    startCommand: python -m src.worker
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-agent-postgres
+          property: connectionString
+      - key: NEO4J_URI
+        fromService:
+          type: pserv
+          name: ai-agent-neo4j
+          property: host
+      - key: NEO4J_USER
+        value: neo4j
+      - key: NEO4J_PASSWORD
+        fromService:
+          type: pserv
+          name: ai-agent-neo4j
+          property: password
+      - key: DIRECTUS_URL
+        fromService:
+          type: web
+          name: ai-agent-directus
+          property: url
+      - key: APP_ENV
+        value: production
+      # Cognee integration for worker
+      - key: COGNEE_ENABLED
+        value: "true"
+      - key: COGNEE_HOST
+        fromService:
+          type: pserv
+          name: ai-agent-cognee
+          property: host
+      - key: COGNEE_PORT
+        value: "8000"
+    numInstances: 1
+
+databases:
+  # Main AI Agent PostgreSQL Database
+  - name: ai-agent-postgres
+    databaseName: ai_agent
+    user: ai_agent
+    plan: standard
+    postgresMajorVersion: 15
+    # Note: pgvector extension must be enabled post-provisioning via SQL:
+    # CREATE EXTENSION IF NOT EXISTS vector;
+
+  # Directus PostgreSQL Database
+  - name: ai-agent-directus-postgres
+    databaseName: directus
+    user: directus
+    plan: starter
+    postgresMajorVersion: 15
+
+# Environment Groups for shared configuration
+envVarGroups:
+  - name: ai-agent-common
+    envVars:
+      - key: TZ
+        value: UTC
+      - key: PYTHONUNBUFFERED
+        value: "1"

@@ -1,0 +1,85 @@
+
+================================================================================
+Department of Aerospace and Mechanical Engineering, SETU Carlow.
+Monthly Learning Report / Logbook
+================================================================================
+
+Student Name: Mohammed Aliane
+Student ID: C00257962
+Work Placement Company: Matchgorithm Ltd.
+Report Number: 003 (Public Deployment & Scaling Phase)
+Date: 22/02/2026
+
+--------------------------------------------------------------------------------
+1. LEARNING UNDERTAKEN
+--------------------------------------------------------------------------------
+This month focused on 'Production Engineering' and 'Systems Reliability.' I learned 
+the complexities of moving a containerized MVP into a live public environment. 
+I mastered high-availability strategies for Podman, including daemonless scaling 
+and automated recovery. I gained advanced experience in cybersecurity hardening, 
+focusing on edge-level rate limiting and penetration testing of rootless networks. 
+Furthermore, I learned how to manage a live 'Software Bill of Materials' (SBOM) 
+using UV to ensure zero-day vulnerabilities are patched instantly.
+
+--------------------------------------------------------------------------------
+2. ROLE AND RESPONSIBILITIES
+--------------------------------------------------------------------------------
+In my final month as a Full Stack AI Systems Architect, my responsibilities included:
+- Overseeing the production launch of the Matchgorithm AI Agent system.
+- Managing the final PostgreSQL migration to support enterprise-scale data loads.
+- Designing the observability framework (Prometheus/Grafana) for the live app.
+- Finalizing the 'Agentic Engineering' documentation to ensure project continuity 
+  for the permanent development team.
+
+--------------------------------------------------------------------------------
+3. OVERCOMING CHALLENGES
+--------------------------------------------------------------------------------
+During the final deployment, we encountered 'Edge Latency' issues due to the 
+SSL/TLS handshake overhead on the VPS. I overcame this by optimizing the Nginx 
+configuration with HTTP/2 and implementing a Redis-based caching layer for 
+the Optimizer's most frequent result sets. This reduced the time-to-first-byte 
+(TTFB) for users by 50% without compromising the security of the TLS tunnel.
+
+--------------------------------------------------------------------------------
+4. BIGGEST ACHIEVEMENT
+--------------------------------------------------------------------------------
+The successful public launch of the Matchgorithm AI Agent stack. The system is 
+now fully operational in a production environment, leveraging an agentic 
+orchestration layer that allows for autonomous code updates and self-healing 
+infrastructure. This marks the full transition from a legacy monolith to a 
+modern, AI-first, hardened systems architecture.
+
+--------------------------------------------------------------------------------
+5. PROJECT ROADMAP (FINAL)
+--------------------------------------------------------------------------------
+- Month 1 (Complete): Architectural Design and Infrastructure.
+- Month 2 (Complete): MVP Integration and Optimizer Staging.
+- Month 3 (Current): Final Security Hardening, Public Deployment, and Scaling.
+
+--------------------------------------------------------------------------------
+DAILY LOG OF HOURS (Month 3: 2026-03-05 to 2026-04-05)
+--------------------------------------------------------------------------------
+| Date         | Task / Dept               | Hrs | Details                                                 |
+------------------------------------------------------------------------------------------------------------
+| 05/03/26     | Production Hardening      | 8   | Finalizing UFW rules and Fail2Ban jail configurations for the VPS. |
+| 06/03/26     | Scaling                   | 8   | Configuring Podman auto-restart policies and load balancing for API workers. |
+| 09/03/26     | Security                  | 8   | Conducting a full penetration test on the rootless container network. |
+| 10/03/26     | Deployment                | 8   | Executing the final push to production via GitLab CI/CD pipelines. |
+| 11/03/26     | Optimization              | 8   | Implementing Redis caching layer for the most frequent Optimizer queries. |
+| 12/03/26     | Monitoring                | 8   | Setting up Grafana alerts for production anomalies and server health. |
+| 13/03/26     | Launch                    | 8   | Validating the public-facing Gradio UI and Nginx SSL certificates. |
+| 16/03/26     | Database                  | 8   | Finalizing the PostgreSQL migration for production-grade persistence. |
+| 17/03/26     | Agentic Scaling           | 8   | Expanding FastMCP tool-calling capabilities for multi-user support. |
+| 18/03/26     | Maintenance               | 8   | Establishing an automated backup schedule for SQLite and Vector DBs. |
+| 19/03/26     | Refinement                | 8   | Using Kilocode to optimize the Software Bill of Materials (SBOM) for speed. |
+| 20/03/26     | Analytics                 | 8   | Integrating Prometheus tracking for user-matching success rates. |
+| 23/03/26     | Hardening                 | 8   | Implementing rate-limiting at the Nginx edge to prevent API abuse. |
+| 24/03/26     | Collaboration             | 8   | Onboarding the wider dev team to the new Agentic Engineering workflow. |
+| 25/03/26     | Testing                   | 8   | Performing end-to-end UAT (User Acceptance Testing) on the live system. |
+| 26/03/26     | HPC Audit                 | 8   | Verifying Torch-rs performance under concurrent production load. |
+| 27/03/26     | State Audit               | 8   | Validating the final promotion of all staging data to 'Canonical' status. |
+| 30/03/26     | Documentation             | 8   | Finalizing the technical handover manual and architecture diagrams. |
+| 31/03/26     | Refactoring               | 8   | Cleaning up legacy AngularJS artifacts and unused Docker configurations. |
+| 01/04/26     | Closing                   | 8   | Final project review with the CEO and submission of the 3-month logbook. |
+| 02/04/26     | Production Hardening      | 8   | Finalizing UFW rules and Fail2Ban jail configurations for the VPS. |
+| 03/04/26     | Scaling                   | 8   | Configuring Podman auto-restart policies and load balancing for API workers. |

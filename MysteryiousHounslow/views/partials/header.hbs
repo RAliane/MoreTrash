@@ -1,0 +1,35 @@
+<header class="border-b border-border bg-background sticky top-0 z-50">
+  <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-16">
+      <div class="flex items-center gap-8">
+        <a href="/" class="text-2xl font-bold text-primary">Matchgorithm</a>
+        
+        <div class="hidden md:flex items-center gap-6">
+          <a href="/platform" class="text-muted-foreground hover:text-foreground transition">Platform</a>
+          <a href="/solutions" class="text-muted-foreground hover:text-foreground transition">Solutions</a>
+          <a href="/pricing" class="text-muted-foreground hover:text-foreground transition">Pricing</a>
+          <a href="/docs" class="text-muted-foreground hover:text-foreground transition">Docs</a>
+          <a href="/about" class="text-muted-foreground hover:text-foreground transition">About</a>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-4">
+        {{#if user}}
+          <a href="/dashboard" class="text-muted-foreground hover:text-foreground transition">Dashboard</a>
+          <button 
+            hx-post="/api/auth/logout" 
+            hx-swap="none"
+            class="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition"
+          >
+            Logout
+          </button>
+        {{else}}
+          <a href="/auth/sign-in" class="text-muted-foreground hover:text-foreground transition">Sign In</a>
+          <a href="/auth/sign-up" class="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition">
+            Get Started
+          </a>
+        {{/if}}
+      </div>
+    </div>
+  </nav>
+</header>

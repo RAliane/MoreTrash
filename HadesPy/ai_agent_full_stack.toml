@@ -1,0 +1,197 @@
+[Project]
+name = "AI-Agent-Directus-FastMCP-FullStack"
+version = "0.1.0"
+owner = "AI Engineer / DevOps"
+description = "End-to-end AI agent system with Directus, FastAPI, FastMCP, Cognee RAG, Gradio UI, Podman networking, GitLab CI/CD, and hardened Linux deployment."
+
+[Runtime]
+package_manager = "uv"
+python_version = ">=3.12"
+asgi_server = "uvicorn"
+
+[Artifacts]
+models_file = "artifacts/models.json"
+directus_db = "artifacts/data.db"
+directus_schema = "artifacts/schema.sql"
+embedding_store = "artifacts/embeddings.db"
+
+[Dependencies]
+
+# Core API
+fastapi = "fastapi"
+pydantic = "pydantic"
+anyio = "anyio"
+httpx = "httpx"
+uvicorn = { name = "uvicorn", extras = ["standard"] }
+
+# MCP
+fastmcp = "fastmcp"
+
+# Directus
+directus_sdk = "directus-sdk-py"
+
+# Memory / RAG
+cognee_ai = "cognee-ai"
+sentence_transformers = "sentence-transformers"
+
+# UI
+gradio = "gradio"
+streamlit = "streamlit"
+
+# Observability
+prometheus_client = "prometheus-client"
+orjson = "orjson"
+python_dotenv = "python-dotenv"
+
+[UV.Commands]
+init = "uv init ai-agent"
+add_core = """
+uv add fastapi pydantic anyio httpx uvicorn[standard]
+uv add fastmcp directus-sdk-py
+uv add cognee-ai sentence-transformers
+uv add gradio streamlit
+uv add prometheus-client orjson python-dotenv
+"""
+sync = "uv sync"
+run_api = "uv run uvicorn main:app --host 0.0.0.0 --port 8000"
+run_ui_gradio = "uv run python ui_gradio.py"
+run_ui_streamlit = "uv run streamlit run ui_streamlit.py"
+
+[Directus]
+database = "sqlite"
+database_path = "artifacts/data.db"
+bootstrap_models = "artifacts/models.json"
+auth_source_of_truth = true
+
+[Directus.Collections]
+
+[[Directus.Collections.collection]]
+name = "messages"
+fields = [
+  { name = "id", type = "uuid", primary = true },
+  { name = "role", type = "string" },
+  { name = "content", type = "text" },
+  { name = "created_at", type = "datetime" }
+]
+
+[[Directus.Collections.collection]]
+name = "memory_chunks"
+fields = [
+  { name = "id", type = "uuid", primary = true },
+  { name = "embedding", type = "json" },
+  { name = "text", type = "text" }
+]
+
+[FastAPI]
+entrypoint = "main:app"
+metrics_endpoint = "/metrics"
+
+[FastMCP]
+agent_endpoint = "/agent"
+auto_register_tools = true
+
+[[FastMCP.tools]]
+name = "directus_query"
+description = "Query Directus collection"
+
+[[FastMCP.tools]]
+name = "directus_create"
+description = "Insert record into Directus"
+
+[Cognee]
+embedding_model = "all-MiniLM-L6-v2"
+vector_store = "artifacts/embeddings.db"
+auto_context_window = true
+
+[UI]
+default = "gradio"
+subdomains = [
+  { service = "chat", domain = "chat.example.com" },
+  { service = "directus", domain = "directus.example.com" },
+  { service = "api", domain = "api.example.com" }
+]
+
+[Networking]
+
+[Networking.TripleLayer]
+edge_network = "edge_net"
+app_network = "app_net"
+db_network = "db_net"
+
+[Networking.Rules]
+edge_exposes = ["80", "443"]
+app_internal_ports = ["8000"]
+db_internal_ports = ["5432", "sqlite"]
+
+[ReverseProxy]
+engine = "nginx"
+tls = "letsencrypt"
+
+[[ReverseProxy.routes]]
+host = "chat.example.com"
+proxy_pass = "app_net:8000"
+
+[[ReverseProxy.routes]]
+host = "directus.example.com"
+proxy_pass = "app_net:8055"
+
+[Firewall]
+engine = "ufw"
+allow_ports = ["22", "80", "443"]
+deny_all_other = true
+
+[Fail2Ban]
+enabled = true
+protect_services = ["ssh", "nginx"]
+
+[Podman]
+use_podman = true
+use_secrets = true
+secret_sources = ["DIRECTUS_TOKEN", "OPENAI_API_KEY"]
+
+[Observability]
+prometheus_enabled = true
+grafana_enabled = true
+scrape_targets = ["api.example.com/metrics"]
+
+[CI_CD]
+provider = "gitlab"
+
+[CI_CD.Stages]
+stages = ["lint", "test", "build", "deploy"]
+
+[[CI_CD.Jobs]]
+name = "lint"
+script = "uv run ruff check ."
+
+[[CI_CD.Jobs]]
+name = "test"
+script = "uv run pytest"
+
+[[CI_CD.Jobs]]
+name = "build"
+script = "podman build -t ai-agent ."
+
+[[CI_CD.Jobs]]
+name = "deploy"
+script = "podman-compose up -d"
+
+[Constraints]
+
+hard = [
+  "Directus SQLite initializes successfully",
+  "models.json bootstraps collections",
+  "FastMCP tool registration passes",
+  "Pydantic validates all requests",
+  "Triple-layer network isolation enforced",
+  "UFW active with default deny",
+  "Fail2Ban active",
+  "Prometheus metrics exposed",
+  "CI pipeline passes"
+]
+
+soft = [
+  { name = "RAG recall", threshold = 0.8 },
+  { name = "Agent latency_ms", threshold = 500 },
+  { name = "Cache hit ratio", threshold = 0.85 }
+]

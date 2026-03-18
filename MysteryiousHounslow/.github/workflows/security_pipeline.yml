@@ -1,0 +1,283 @@
+name: Security Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run security scans daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  secret-scanning:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for comprehensive scanning
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Gitleaks report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+
+  python-sast:
+    name: Python SAST
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install UV
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install Bandit
+        run: /home/runner/.local/bin/uv pip install bandit --system
+
+      - name: Run Bandit SAST
+        run: bandit -r fastapi_xgboost_optimizer/app/ -f json -o bandit_report.json
+        continue-on-error: true
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-report
+          path: bandit_report.json
+
+  rust-sast:
+    name: Rust SAST
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run Cargo Audit
+        run: cargo audit --json > cargo_audit_report.json
+        continue-on-error: true
+
+      - name: Run Clippy
+        run: cargo clippy -- -D warnings
+        continue-on-error: true
+
+      - name: Upload Cargo Audit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cargo-audit-report
+          path: cargo_audit_report.json
+
+  dependency-scanning:
+    name: Dependency Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install UV
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install Safety
+        run: /home/runner/.local/bin/uv pip install safety --system
+
+      - name: Run Safety (Python dependencies)
+        run: |
+          cd fastapi_xgboost_optimizer
+          safety check --full-report --json > ../safety_report.json
+        continue-on-error: true
+
+      - name: Run pip-audit
+        run: |
+          /home/runner/.local/bin/uv pip install pip-audit --system
+          cd fastapi_xgboost_optimizer
+          pip-audit --format json > ../pip_audit_report.json
+        continue-on-error: true
+
+      - name: Upload dependency reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-reports
+          path: |
+            safety_report.json
+            pip_audit_report.json
+
+  container-scanning:
+    name: Container Scanning
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'  # Only run on push to avoid rebuilds on PR
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+
+      - name: Build container image
+        run: podman build -t matchgorithm:${{ github.sha }} .
+
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Scan container image
+        run: trivy image --exit-code 1 --severity CRITICAL --format json -o trivy_report.json matchgorithm:${{ github.sha }}
+        continue-on-error: true
+
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-report
+          path: trivy_report.json
+
+  security-gate:
+    name: Security Gate
+    runs-on: ubuntu-latest
+    needs: [secret-scanning, python-sast, rust-sast, dependency-scanning]
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all security reports
+        uses: actions/download-artifact@v4
+        with:
+          path: security-reports
+
+      - name: Analyze security results
+        run: |
+          echo "🔍 Analyzing security scan results..."
+
+          # Check for critical vulnerabilities in Cargo Audit
+          if [ -f "security-reports/cargo-audit-report/cargo_audit_report.json" ]; then
+            if grep -q '"severity":"critical"' security-reports/cargo-audit-report/cargo_audit_report.json; then
+              echo "❌ Critical Rust vulnerabilities found"
+              exit 1
+            fi
+          fi
+
+          # Check for high-severity Python issues
+          if [ -f "security-reports/bandit-report/bandit_report.json" ]; then
+            if grep -q '"severity": "HIGH"' security-reports/bandit-report/bandit_report.json; then
+              echo "❌ High-severity Python security issues found"
+              exit 1
+            fi
+          fi
+
+          # Check for critical Python dependencies
+          if [ -f "security-reports/dependency-reports/safety_report.json" ]; then
+            if grep -q '"severity": "critical"' security-reports/dependency-reports/safety_report.json; then
+              echo "❌ Critical Python dependency vulnerabilities found"
+              exit 1
+            fi
+          fi
+
+          echo "✅ Security gate passed - no critical issues found"
+
+      - name: Security gate passed
+        run: |
+          echo "🎉 All security checks passed!"
+          echo "✅ No critical vulnerabilities detected"
+          echo "✅ No high-severity security issues found"
+          echo "✅ Safe to merge"
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [secret-scanning, python-sast, rust-sast, dependency-scanning, container-scanning]
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all security reports
+        uses: actions/download-artifact@v4
+        with:
+          path: security-reports
+
+      - name: Generate security summary
+        run: |
+          echo "# 🔒 Security Scan Summary" > security_summary.md
+          echo "" >> security_summary.md
+          echo "## Scan Results" >> security_summary.md
+          echo "" >> security_summary.md
+
+          # Count issues in each report
+          if [ -f "security-reports/cargo-audit-report/cargo_audit_report.json" ]; then
+            cargo_count=$(grep -c '"severity"' security-reports/cargo-audit-report/cargo_audit_report.json 2>/dev/null || echo "0")
+            echo "- **Cargo Audit**: $cargo_count vulnerabilities found" >> security_summary.md
+          fi
+
+          if [ -f "security-reports/bandit-report/bandit_report.json" ]; then
+            bandit_count=$(grep -c '"issue_severity"' security-reports/bandit-report/bandit_report.json 2>/dev/null || echo "0")
+            echo "- **Bandit**: $bandit_count security issues found" >> security_summary.md
+          fi
+
+          if [ -f "security-reports/dependency-reports/safety_report.json" ]; then
+            safety_count=$(grep -c '"severity"' security-reports/dependency-reports/safety_report.json 2>/dev/null || echo "0")
+            echo "- **Safety**: $safety_count dependency vulnerabilities found" >> security_summary.md
+          fi
+
+          if [ -f "security-reports/trivy-report/trivy_report.json" ]; then
+            trivy_count=$(grep -c '"VulnerabilityID"' security-reports/trivy-report/trivy_report.json 2>/dev/null || echo "0")
+            echo "- **Trivy**: $trivy_count container vulnerabilities found" >> security_summary.md
+          fi
+
+          echo "" >> security_summary.md
+          echo "## Recommendations" >> security_summary.md
+          echo "" >> security_summary.md
+          echo "1. Review all security reports in the artifacts" >> security_summary.md
+          echo "2. Address critical and high-severity issues immediately" >> security_summary.md
+          echo "3. Update dependencies to fix known vulnerabilities" >> security_summary.md
+          echo "4. Run local security scans: \`./scripts/security_scan.sh\`" >> security_summary.md
+
+      - name: Upload security summary
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-summary
+          path: security_summary.md

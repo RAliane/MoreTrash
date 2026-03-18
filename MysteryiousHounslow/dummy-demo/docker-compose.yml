@@ -1,0 +1,86 @@
+services:
+  # PostgreSQL with pgvector
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: dummy-demo-db
+    environment:
+      POSTGRES_DB: matchgorithm
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: demo123
+    ports:
+      - "5433:5432"  # Different port to avoid conflicts
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dummy-net
+
+  # Directus CMS
+  directus:
+    image: directus/directus:10.8
+    container_name: dummy-demo-directus
+    environment:
+      KEY: dummy-demo-key-123456789
+      SECRET: dummy-demo-secret-987654321
+      DB_CLIENT: pg
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: matchgorithm
+      DB_USER: postgres
+      DB_PASSWORD: demo123
+      ADMIN_EMAIL: admin@dummy-demo.co.uk
+      ADMIN_PASSWORD: demo123
+      PUBLIC_URL: http://localhost:8056
+      CORS_ENABLED: true
+      CORS_ORIGIN: true
+    ports:
+      - "8056:8055"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - directus_uploads:/directus/uploads
+      - ./directus/config:/directus/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8055/server/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - dummy-net
+
+  # Rust Web App (minimal version)
+  web:
+    build:
+      context: .
+      dockerfile: Containerfile
+    container_name: dummy-demo-web
+    ports:
+      - "3000:3000"
+    environment:
+      RUST_LOG: info
+      DATABASE_URL: postgresql://postgres:demo123@db:5432/matchgorithm
+      DIRECTUS_URL: http://directus:8055
+    depends_on:
+      - db
+      - directus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - dummy-net
+
+volumes:
+  db_data:
+  directus_uploads:
+
+networks:
+  dummy-net:
+    driver: bridge

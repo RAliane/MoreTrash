@@ -1,0 +1,22 @@
+[package]
+name = "riverStyx"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.101"
+async-graphql = "7.2.1"
+async_fsm = "0.1.4"
+axum_csrf = "0.11.0"
+cachelito = "0.16.0"
+jsonwebtokens = "1.2.0"
+moka = "0.12.13"
+rayon = "1.11.0"
+rust-mcp-schema = "0.9.5"
+rust-mcp-sdk = "0.8.3"
+serde = "1.0.228"
+serde_json = "1.0.149"
+thiserror = "2.0.18"
+tokio = "1.49.0"
+tower = "0.5.3"
+tower-http = "0.6.8"

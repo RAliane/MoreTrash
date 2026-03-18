@@ -1,0 +1,41 @@
+name: SQL Injection Scan
+on: [push, pull_request]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install UV
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Install dependencies
+        run: uv pip install bandit sqlparse
+      - name: Run SQL injection scans
+        run: |
+          # Scan Python files
+          bandit -r src/backend/ --ini .bandit.yml
+          # Scan SQL files
+          python -c "
+          import sqlparse
+          from pathlib import Path
+          for sql_file in Path('migrations').glob('*.sql'):
+              with open(sql_file) as f:
+                  for stmt in sqlparse.parse(f.read()):
+                      if any(token.ttype in sqlparse.tokens.Keyword and
+                             token.value.upper() in ('EXECUTE', 'DROP', 'TRUNCATE')
+                             for token in stmt.flatten()):
+                          print(f'❌ Suspicious SQL in {sql_file}: {stmt}')
+                          exit(1)
+          "
+      - name: Test hybrid endpoint security
+        run: |
+          # Start services (assuming docker-compose is available)
+          docker-compose up -d
+          sleep 10
+          # Run SQL injection tests
+          chmod +x scripts/test_sql_injection.sh
+          ./scripts/test_sql_injection.sh

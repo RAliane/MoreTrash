@@ -1,0 +1,28 @@
+name = "matchgorithm"
+type = "javascript"
+main = "functions/[[path]].ts"
+compatibility_date = "2024-12-01"
+
+[env.production]
+routes = [
+  { pattern = "matchgorithm.co.uk", zone_name = "matchgorithm.co.uk" }
+]
+
+[build]
+command = "npm run build"
+cwd = "./."
+watch_paths = ["src/**/*.ts"]
+
+[build.upload]
+format = "service-worker"
+
+[env.development]
+routes = []
+
+[d1]
+bindings = [
+  { binding = "DB", database_name = "matchgorithm-db", database_id = "matchgorithm-db" }
+]
+
+[kv_namespaces]
+binding = "CACHE"

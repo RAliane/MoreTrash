@@ -1,0 +1,426 @@
+# Matchgorithm
+
+[![CI](https://github.com/your-org/matchgorithm/workflows/CI/badge.svg)](https://github.com/your-org/matchgorithm/actions)
+[![Security Audit](https://github.com/your-org/matchgorithm/workflows/Security%20Audit/badge.svg)](https://github.com/your-org/matchgorithm/actions)
+
+AI-Powered Matching Platform with Evolutionary Algorithms built with Rust and Dioxus.
+
+## Architecture
+
+Matchgorithm implements a secure, scalable microservices architecture with network isolation:
+
+### Core Services
+- **Frontend**: Dioxus (Rust-based reactive framework) + Axum web server
+- **Backend**: FastAPI ML pipeline with XGBoost/OR-Tools/PyGAD optimization
+- **Database**: PostgreSQL 13+ with PostGIS and pgvector extensions
+- **GraphQL**: Hasura for real-time data access
+- **CMS**: Directus for content management, admin interface, and user authentication
+- **Workflow**: n8n for automated business processes
+- **Authentication**: Directus handles user registration, login, and password reset
+
+### Infrastructure & Security
+- **Container Runtime**: Podman with rootless containers
+- **Network Security**: Triple network isolation (edge-net, auth-net, db-net)
+- **Reverse Proxy**: Nginx with SSL termination and load balancing
+- **Monitoring**: Prometheus + Grafana stack
+- **Secrets Management**: Podman secrets with file-based storage
+- **SSL/TLS**: Let's Encrypt certificates with auto-renewal
+
+### Deployment
+- **Orchestration**: Podman Compose with production configurations
+- **CI/CD**: GitHub Actions with security scanning and automated testing
+- **Backup**: Automated PostgreSQL backups with point-in-time recovery
+- **Scaling**: Horizontal scaling ready with load balancer configuration
+
+## Prerequisites
+
+- Rust 1.70+ with cargo
+- Python 3.11+ with UV package manager
+- Podman (recommended) or Docker
+- PostgreSQL client tools (optional)
+
+### Rust Setup
+
+```bash
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Add WASM target for Dioxus
+rustup target add wasm32-unknown-unknown
+
+# Install trunk for Dioxus development (optional)
+cargo install trunk
+```
+
+### Python Setup
+
+```bash
+# Install UV package manager
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install Python dependencies (FastAPI components)
+cd fastapi_xgboost_optimizer
+uv pip install -e .
+```
+
+## Development
+
+### Rust Components (Frontend/Backend)
+
+```bash
+# Install dependencies and build
+cargo build
+
+# Run in development mode
+cargo run
+
+# Build for production
+cargo build --release
+```
+
+### Python Components (ML Pipeline)
+
+```bash
+# Navigate to FastAPI project
+cd fastapi_xgboost_optimizer
+
+# Install dependencies with UV
+uv pip install -e .
+
+# Install development dependencies
+uv pip install -e ".[dev]"
+
+# Run development server
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+```
+
+### Full Development Setup
+
+```bash
+# Install all dependencies
+./scripts/setup.sh
+
+# Run security scan
+./scripts/security_scan.sh
+
+# Start all services
+podman-compose up -d
+
+# Check service health
+curl http://localhost/api/health
+curl http://localhost:8001/health
+```
+
+## Deployment
+
+### Production Setup
+
+Matchgorithm is production-ready with comprehensive monitoring, security, and scalability features:
+
+#### Prerequisites for Production
+- Podman 4.0+ or Docker 20.0+
+- PostgreSQL 13+ with PostGIS and pgvector extensions
+- SSL/TLS certificates (Let's Encrypt recommended)
+- Domain name with DNS configured
+
+#### One-Command Production Deployment
+
+```bash
+# Generate SSL certificates (development)
+./scripts/generate_certs.sh
+
+# Run production setup script
+./scripts/production_setup.sh
+
+# Validate deployment
+./scripts/final_validation.sh
+```
+
+#### Manual Production Deployment
+
+1. **Setup Secrets**:
+```bash
+# Create Podman secrets from environment files
+podman secret create postgres_user ./secrets/postgres_user.txt
+podman secret create postgres_password ./secrets/postgres_password.txt
+podman secret create postgres_db ./secrets/postgres_db.txt
+# ... create all required secrets
+```
+
+2. **Database Setup**:
+```bash
+# Run database migrations
+./scripts/run_migrations.sh
+```
+
+3. **Deploy Services**:
+```bash
+# Start all services
+podman-compose up -d
+
+# Check service health
+curl https://your-domain.com/health
+
+# View logs
+podman-compose logs -f
+```
+
+4. **SSL Configuration**:
+```bash
+# For production, replace self-signed certs with Let's Encrypt
+certbot certonly --webroot -w /var/www/html -d your-domain.com
+```
+
+#### Service URLs (Production)
+- **Main Application**: https://your-domain.com
+- **Directus CMS**: https://directus.your-domain.com
+- **Hasura Console**: https://your-domain.com/console
+- **Prometheus**: https://your-domain.com:9090
+- **Grafana**: https://your-domain.com:3000
+
+### Development Setup
+
+For local development with hot-reload:
+
+```bash
+# Install dependencies
+cargo build
+
+# Start development server
+cargo run
+
+# Or use podman-compose for full stack
+podman-compose -f podman-compose.dev.yml up -d
+```
+
+## API Routes
+
+### Public Routes
+- `GET /` - Home page
+- `GET /platform` - Platform overview
+- `GET /solutions` - Solutions page
+- `GET /about` - About page
+- `GET /contact` - Contact page
+- `GET /pricing` - Pricing page
+- `GET /blog` - Blog
+- `GET /careers` - Careers
+- `GET /docs` - Documentation
+- `GET /api-docs` - API documentation
+- `GET /chat` - Chat support
+- `GET /privacy` - Privacy policy
+- `GET /terms` - Terms of service
+
+### Authentication Routes
+- `POST /api/auth/login` - User login
+- `POST /api/auth/register` - User registration
+- `POST /api/auth/logout` - User logout
+- `POST /api/auth/request-reset` - Request password reset (sends email)
+- `POST /api/auth/reset-password` - Reset password with token
+- `GET /auth/sign-in` - Sign in page
+- `GET /auth/sign-up` - Sign up page
+- `GET /forgot-password` - Password reset request page
+- `GET /reset-password` - Password reset confirmation page
+
+### Protected Routes (Dashboard)
+- `GET /dashboard` - User dashboard
+- `GET /dashboard/profile` - Profile settings
+- `GET /dashboard/analytics` - User analytics
+- `GET /admin` - Admin dashboard
+- `GET /admin/users` - User management
+- `GET /admin/analytics` - Admin analytics
+- `GET /admin/settings` - System settings
+
+### API Endpoints
+- `GET /api/health` - Health check
+- `POST /api/graphql` - GraphQL proxy to Hasura
+- `GET /api/cms/:endpoint` - CMS proxy to Directus
+
+## Environment Variables
+
+Configure the following environment variables (stored as Podman secrets in production):
+
+### Required
+- `DATABASE_URL` - PostgreSQL connection string
+- `DIRECTUS_URL` - Directus API URL
+- `DIRECTUS_API_KEY` - Directus access token
+- `HASURA_GRAPHQL_ENDPOINT` - Hasura GraphQL endpoint
+- `HASURA_ADMIN_SECRET` - Hasura admin secret
+- `JWT_PRIVATE_KEY_PEM` - RSA private key for JWT signing
+- `JWT_PUBLIC_KEY_PEM` - RSA public key for JWT verification
+
+### Optional
+- `SERVER_HOST` - Server bind host (default: 0.0.0.0)
+- `SERVER_PORT` - Server port (default: 8000)
+- `RUST_LOG` - Logging level (default: info)
+- `GROQ_API_KEY` - Groq AI API key
+- `OPENROUTER_API_KEY` - OpenRouter API key
+- `GOOGLE_CLIENT_ID` - Google OAuth client ID
+- `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
+- `GITHUB_CLIENT_ID` - GitHub OAuth client ID
+- `GITHUB_CLIENT_SECRET` - GitHub OAuth client secret
+- `APPLE_CLIENT_ID` - Apple OAuth client ID
+- `APPLE_TEAM_ID` - Apple team ID
+- `APPLE_KEY_ID` - Apple key ID
+
+### Directus SMTP (for Password Reset)
+- `SMTP_HOST` - SMTP server hostname (e.g., smtp.gmail.com)
+- `SMTP_PORT` - SMTP server port (default: 587)
+- `SMTP_USER` - SMTP authentication username
+- `SMTP_PASSWORD_FILE` - Path to SMTP password file (Podman secret)
+- `SMTP_FROM` - From email address for reset emails
+
+## Production Operations
+
+### Monitoring & Observability
+
+Access monitoring dashboards:
+- **Grafana**: https://your-domain.com:3000 (admin/admin)
+- **Prometheus**: https://your-domain.com:9090
+- **Service Health**: https://your-domain.com/health
+
+### Backup & Recovery
+
+```bash
+# Manual backup
+podman exec matchgorithm-postgres pg_dump -U postgres matchgorithm > backup.sql
+
+# Automated backups are configured in podman-compose.yml
+# Restore from backup
+podman exec -i matchgorithm-postgres psql -U postgres matchgorithm < backup.sql
+```
+
+### Security & Compliance
+
+- **Network Isolation**: Services communicate through designated networks only
+- **Secret Management**: All sensitive data stored as Podman secrets
+- **Security Scanning**: Automated SAST/DAST via CI/CD pipeline
+- **Access Control**: JWT-based authentication with role-based permissions
+
+### Troubleshooting
+
+```bash
+# Check all service logs
+podman-compose logs -f
+
+# Check specific service
+podman-compose logs -f app
+
+# Restart services
+podman-compose restart
+
+# Run validation
+./scripts/final_validation.sh
+
+# Security audit
+./scripts/security_scan.sh
+```
+
+## Project Structure
+
+```
+matchgorithm/
+├── src/                         # Rust application source
+│   ├── main.rs                  # Axum server and routes
+│   ├── components/              # Dioxus UI components
+│   ├── pages/                   # Dioxus page components
+│   └── services/                # Backend integrations (Hasura, Directus)
+├── app/                         # FastAPI ML pipeline (separate container)
+│   ├── main.py                  # FastAPI application
+│   ├── pipeline.py              # Core optimization algorithms
+│   └── database/                # Database clients
+├── db/migrations/               # PostgreSQL schema migrations
+├── monitoring/                  # Prometheus/Grafana configuration
+├── scripts/                     # Deployment and maintenance scripts
+│   ├── production_setup.sh      # One-command production deployment
+│   ├── run_migrations.sh        # Database migration runner
+│   ├── final_validation.sh      # End-to-end validation
+│   ├── security_scan.sh         # Security auditing
+│   └── generate_certs.sh        # SSL certificate generation
+├── certs/                       # SSL certificates directory
+├── docs/                        # Documentation and guides
+├── Cargo.toml                   # Rust dependencies
+├── pyproject.toml               # Python dependencies
+├── podman-compose.yml           # Production container orchestration
+├── nginx.conf                   # Reverse proxy configuration
+└── README.md                    # This file
+```
+matchgorithm/
+├── src/
+│   ├── main.rs                    # Application entry point with Axum server
+│   ├── config.rs                  # Configuration management
+│   ├── components/                # Dioxus UI components
+│   │   ├── mod.rs
+│   │   ├── LoginForm.rs          # Login form component
+│   │   └── AuthLayout.rs         # Auth page wrapper
+│   ├── pages/                    # Dioxus page components
+│   │   ├── mod.rs
+│   │   ├── Home.rs               # Home page
+│   │   └── Dashboard.rs          # Dashboard page
+│   ├── services/                 # Backend service integrations
+│   │   ├── mod.rs
+│   │   ├── auth/                 # Authentication services
+│   │   │   ├── mod.rs
+│   │   │   ├── jwt.rs            # JWT token handling
+│   │   │   └── directus.rs       # Directus auth client
+│   │   ├── database.rs           # PostgreSQL connection
+│   │   ├── directus.rs           # Directus CMS client
+│   │   ├── hasura.rs             # Hasura GraphQL client
+│   │   └── auth.rs               # Auth API handlers
+│   ├── middleware/
+│   │   └── auth.rs               # JWT authentication middleware
+│   └── utils/                    # Utility functions (placeholder)
+├── docs/                        # Documentation
+├── nginx/                       # Nginx configuration
+│   └── conf.d/
+│       └── app.conf             # App reverse proxy config
+├── Cargo.toml                   # Rust dependencies
+├── Containerfile                # Podman build configuration
+├── podman-compose.yml           # Container orchestration
+├── nginx.conf                   # Main Nginx config
+├── .env.example                 # Environment variables example
+└── start.sh                     # Development startup script
+```
+
+## Development Status
+
+### ✅ Completed Features
+- **Matching Algorithm**: XGBoost/OR-Tools/PyGAD optimization pipeline
+- **Database Schema**: Complete PostgreSQL schema with PostGIS/pgvector
+- **Authentication**: JWT-based auth with Directus integration
+- **API Endpoints**: REST and GraphQL APIs fully implemented
+- **Containerization**: Production-ready Podman setup
+- **Security**: Comprehensive DevSecOps with network isolation
+- **Monitoring**: Prometheus/Grafana observability stack
+- **Migrations**: Automated database migrations
+- **SSL/TLS**: HTTPS configuration with certificate management
+- **CI/CD**: GitHub Actions with security scanning
+- **Password Reset**: Complete forgot/reset password with SMTP email integration
+
+### 🚧 Known Issues & Future Enhancements
+- **Real-time Updates**: WebSocket support for live optimization progress
+- **Email Notifications**: Additional SMTP integrations for user communications (registration, notifications)
+- **OAuth Integration**: Social login providers (Google, GitHub, Apple)
+- **File Uploads**: Enhanced Directus file handling
+- **Admin Panel**: Advanced user management features
+- **API Documentation**: Interactive Swagger/OpenAPI docs
+- **Load Testing**: Performance benchmarking under load
+- **Multi-tenancy**: Database isolation for enterprise deployments
+
+### 🛡️ Security & Compliance
+- **Network Security**: Triple network isolation implemented
+- **Secret Management**: Podman secrets with secure storage
+- **Security Headers**: Comprehensive HTTP security headers
+- **Rate Limiting**: DDoS protection and API rate limiting
+- **Audit Logging**: Comprehensive security event logging
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+Proprietary - All rights reserved

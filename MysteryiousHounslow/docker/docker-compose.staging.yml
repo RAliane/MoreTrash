@@ -1,0 +1,279 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: docker.io/library/nginx:alpine
+    container_name: matchgorithm-nginx-staging
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/staging.conf:/etc/nginx/nginx.conf
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - ./docker/nginx/logs:/var/log/nginx
+    depends_on:
+      - app
+      - directus
+    networks:
+      - edge-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: matchgorithm-app-staging
+    depends_on:
+      postgres:
+        condition: service_healthy
+      directus:
+        condition: service_started
+      hasura:
+        condition: service_started
+    secrets:
+      - postgres_user
+      - postgres_password
+      - postgres_db
+      - directus_url
+      - directus_token
+      - hasura_endpoint
+      - hasura_admin_secret
+      - jwt_private_key_pem
+      - jwt_public_key_pem
+    environment:
+      - APP_ENV=staging
+      - FRONTEND_URL=https://staging.matchgorithm.co.uk
+      - BACKEND_URL=https://api.staging.matchgorithm.co.uk
+    ports:
+      - "8000:8000"
+    networks:
+      - edge-net
+      - auth-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  directus:
+    image: directus/directus:latest
+    container_name: matchgorithm-directus-staging
+    environment:
+      SECRET: ${DIRECTUS_SECRET}
+      ADMIN_EMAIL: ${DIRECTUS_ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${DIRECTUS_ADMIN_PASSWORD}
+      PUBLIC_URL: "https://admin.staging.matchgorithm.co.uk"
+      DB_CLIENT: "pg"
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      AUTH_PROVIDERS: "directus"
+      AUTH_PASSWORD_RESET: "true"
+      AUTH_PUBLIC_REGISTRATION: "true"
+      SMTP_HOST: "smtp.gmail.com"
+      SMTP_PORT: "587"
+      SMTP_USER: "matchgorithm@gmail.com"
+      SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+      SMTP_FROM: "noreply@matchgorithm.com"
+    volumes:
+      - ./directus/uploads:/directus/uploads
+      - ./directus/extensions:/directus/extensions
+      - ./docker/nginx/ssl:/etc/letsencrypt:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8055/server/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - auth-net
+      - db-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
+        reservations:
+          cpus: '0.5'
+          memory: 384M
+
+  hasura:
+    image: hasura/graphql-engine:latest
+    container_name: matchgorithm-hasura-staging
+    environment:
+      HASURA_GRAPHQL_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
+      HASURA_GRAPHQL_DEV_MODE: "false"
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
+      HASURA_GRAPHQL_UNAUTHORIZED_ROLE: "anonymous"
+      HASURA_GRAPHQL_ENABLE_TELEMETRY: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    networks:
+      - auth-net
+      - db-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  postgres:
+    image: postgis/postgis:15-3.3-alpine
+    container_name: matchgorithm-postgres-staging
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - db-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: matchgorithm-prometheus-staging
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - edge-net
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: matchgorithm-grafana-staging
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-secure_password_here}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - edge-net
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+
+secrets:
+  postgres_user:
+    external: true
+  postgres_password:
+    external: true
+  postgres_db:
+    external: true
+  directus_secret:
+    external: true
+  directus_admin_email:
+    external: true
+  directus_admin_password:
+    external: true
+  hasura_admin_secret:
+    external: true
+  jwt_private_key_pem:
+    external: true
+  jwt_public_key_pem:
+    external: true
+  directus_api_key:
+    external: true
+  directus_url:
+    external: true
+  directus_token:
+    external: true
+  hasura_endpoint:
+    external: true
+  n8n_webhook_url:
+    external: true
+  n8n_api_url:
+    external: true
+  google_client_id:
+    external: true
+  google_client_secret:
+    external: true
+  github_client_id:
+    external: true
+  github_client_secret:
+    external: true
+  groq_api_key:
+    external: true
+  database_url:
+    external: true
+  smtp_password:
+    external: true
+
+networks:
+  edge-net:
+    driver: bridge
+  auth-net:
+    driver: bridge
+    internal: true
+  db-net:
+    driver: bridge
+    internal: true

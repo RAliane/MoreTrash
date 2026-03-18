@@ -1,0 +1,83 @@
+
+================================================================================
+Department of Aerospace and Mechanical Engineering, SETU Carlow.
+Monthly Learning Report / Logbook
+================================================================================
+
+Student Name: Mohammed Aliane
+Student ID: C00257962
+Work Placement Company: Matchgorithm Ltd.
+Report Number: 001
+Date: 22/02/2026
+
+--------------------------------------------------------------------------------
+1. LEARNING UNDERTAKEN
+--------------------------------------------------------------------------------
+This month focused on transitioning from legacy web architectures to Agentic Engineering. 
+I have mastered deterministic AI workflows using a TOML-based prompting framework. 
+I learned the 'Hades' state management methodology, applying Hot/Warm/Canonical 
+promotion rules to ensure data idempotency. Furthermore, I developed deep expertise 
+in rootless container orchestration using Podman and managed high-performance 
+dependency trees with the UV package manager.
+
+--------------------------------------------------------------------------------
+2. ROLE AND RESPONSIBILITIES
+--------------------------------------------------------------------------------
+As a Full Stack AI Systems Architect, my role involved:
+- Designing a three-tier isolated network for secure container communication.
+- Managing AI agents (Kimi K2.5, OKComputer, Kilocode) for autonomous synthesis.
+- Overseeing the migration of legacy AngularJS code to a modern FastAPI backend.
+- Configuring Cognee RAG for advanced semantic search capabilities.
+
+--------------------------------------------------------------------------------
+3. OVERCOMING CHALLENGES
+--------------------------------------------------------------------------------
+The primary challenge was the complexity of a full Rust rewrite. I pivoted to 
+Python while maintaining 'Rust-level' safety via strict TOML constraints and 
+UV dependency management. I also replaced Docker with Podman to meet non-negotiable 
+enterprise security requirements regarding rootless container daemons.
+
+--------------------------------------------------------------------------------
+4. BIGGEST ACHIEVEMENT
+--------------------------------------------------------------------------------
+Successfully architecting the 'Deterministic AI Agent Stack.' By combining 
+agentic synthesis (OKComputer) with automated refactoring (Kilocode), I built 
+a self-correcting development environment that ensures 100% type-safety and 
+auditability, effectively doing the work of a multi-person team autonomously.
+
+--------------------------------------------------------------------------------
+5. PROJECT ROADMAP
+--------------------------------------------------------------------------------
+- Month 1 (Jan 5 - Feb 5): Architectural Design, Infrastructure, and Base Logic.
+- Month 2 (Feb 5 - Mar 5): MVP Integration of Optimizer Codebase and RAG tuning.
+- Month 3 (Mar 5 - Apr 5): End-to-end Testing and Final Public Deployment.
+
+--------------------------------------------------------------------------------
+DAILY LOG OF HOURS (Month 1: 2026-01-05 to 2026-02-05)
+--------------------------------------------------------------------------------
+| Date         | Task / Dept               | Hrs | Details                                                 |
+------------------------------------------------------------------------------------------------------------
+| 05/01/26     | Project Onboarding        | 8   | Environment setup using UV and Podman.                  |
+| 06/01/26     | Infrastructure            | 8   | Architecting the triple-layer network isolation (edge_net, app_net, db_net). |
+| 07/01/26     | Agentic Setup             | 8   | Initializing Kimi K2.5 and OKComputer for codebase synthesis. |
+| 08/01/26     | Prompt Engineering        | 8   | Drafting the TOML-based deterministic prompting guide.  |
+| 09/01/26     | Backend                   | 8   | Legacy AngularJS algorithm audit and transition planning to FastAPI. |
+| 12/01/26     | Database                  | 8   | Configuring SQLite and PostgreSQL relational schemas within Directus. |
+| 13/01/26     | AI Research               | 8   | Implementing Cognee RAG for long-term vector memory storage. |
+| 14/01/26     | Security Hardening        | 8   | Implementing rootless Podman containers to replace Docker. |
+| 15/01/26     | CI/CD                     | 8   | Developing GitLab CI/CD pipelines for automated testing and linting. |
+| 16/01/26     | DevOps                    | 8   | Configuring Nginx reverse proxy with TLS/SSL via Let's Encrypt. |
+| 19/01/26     | Agentic Logic             | 8   | Implementing Hades-inspired state promotion (Hot/Warm/Canonical). |
+| 20/01/26     | Dependency Management     | 8   | Utilizing Kilocode to audit and update package hygiene. |
+| 21/01/26     | UI Development            | 8   | Prototyping Gradio and Streamlit interfaces for AI agent testing. |
+| 22/01/26     | Optimization              | 8   | Fine-tuning semantic search and caching for High-Performance Compute. |
+| 23/01/26     | API Dev                   | 8   | Building FastMCP tool-calling interfaces for Directus integration. |
+| 26/01/26     | System Audit              | 8   | Running security scans using Bandit, Mypy, and Trivy.   |
+| 27/01/26     | RAG Tuning                | 8   | Adjusting embedding models (all-MiniLM-L6-v2) for better accuracy. |
+| 28/01/26     | Observability             | 8   | Setting up Prometheus metrics for latency and request tracking. |
+| 29/01/26     | Monitoring                | 8   | Building Grafana dashboards for real-time system health visualization. |
+| 30/01/26     | Documentation             | 8   | Finalizing the Software Bill of Materials (SBOM) and Month 1 report. |
+| 02/02/26     | Project Onboarding        | 8   | Environment setup using UV and Podman.                  |
+| 03/02/26     | Infrastructure            | 8   | Architecting the triple-layer network isolation (edge_net, app_net, db_net). |
+| 04/02/26     | Agentic Setup             | 8   | Initializing Kimi K2.5 and OKComputer for codebase synthesis. |
+| 05/02/26     | Prompt Engineering        | 8   | Drafting the TOML-based deterministic prompting guide.  |

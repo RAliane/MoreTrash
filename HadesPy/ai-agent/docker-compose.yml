@@ -1,0 +1,479 @@
+# Docker Compose - AI Agent Full Stack with Neo4j
+# Triple-layer network architecture: edge_net, app_net, db_net
+
+version: "3.8"
+
+# ============================================
+# Networks - Triple Layer Architecture
+# ============================================
+networks:
+  # Edge network: Exposed to internet, only Nginx lives here
+  edge_net:
+    driver: bridge
+    internal: false
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+  # App network: Internal application services
+  app_net:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.20.1.0/24
+
+  # DB network: Database and storage services
+  db_net:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.20.2.0/24
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  directus_uploads:
+    driver: local
+  directus_extensions:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  nginx_certs:
+    driver: local
+  nginx_conf:
+    driver: local
+  # Neo4j volumes
+  neo4j_data:
+    driver: local
+  neo4j_logs:
+    driver: local
+  neo4j_import:
+    driver: local
+  neo4j_plugins:
+    driver: local
+  # LanceDB volume
+  lancedb_data:
+    driver: local
+  # Ollama volume
+  ollama_data:
+    driver: local
+  # Cognee volume
+  cognee_data:
+    driver: local
+
+# ============================================
+# Secrets
+# ============================================
+secrets:
+  directus_token:
+    external: true
+  openai_api_key:
+    external: true
+
+# ============================================
+# Services
+# ============================================
+services:
+  # ----------------------------------------
+  # Neo4j Graph Database (DB Layer)
+  # ----------------------------------------
+  neo4j:
+    image: docker.io/neo4j:5.15.0-community
+    container_name: ai-agent-neo4j
+    restart: unless-stopped
+    networks:
+      - db_net
+      - app_net
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD:?NEO4J_PASSWORD must be set}
+      - NEO4J_PLUGINS=["apoc", "gds"]  # APOC and Graph Data Science plugins
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*,gds.*
+      - NEO4J_dbms_security_procedures_allowlist=apoc.*,gds.*
+      # Memory settings
+      - NEO4J_dbms_memory_heap_initial__size=${NEO4J_HEAP_INITIAL:-512m}
+      - NEO4J_dbms_memory_heap_max__size=${NEO4J_HEAP_MAX:-1G}
+      - NEO4J_dbms_memory_pagecache_size=${NEO4J_PAGECACHE:-512m}
+      # Enable vector index support
+      - NEO4J_dbms_security_auth__enabled=true
+      # Logging
+      - NEO4J_dbms_logs_default__level=INFO
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7474/db/manage/server/jmx/domain/org.neo4j/instance%3Dkernel%230%2Cname%3DConfiguration"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ----------------------------------------
+  # Cognee Memory Service (App Layer)
+  # ----------------------------------------
+  cognee:
+    image: docker.io/cognee/cognee:latest
+    container_name: ai-agent-cognee
+    restart: unless-stopped
+    networks:
+      - app_net
+      - db_net
+    expose:
+      - "8000"
+    environment:
+      - COGNEE_VECTOR_STORE=/data/vectors
+      - COGNEE_EMBEDDING_MODEL=all-MiniLM-L6-v2
+      - COGNEE_AUTO_CONTEXT_WINDOW=true
+      - COGNEE_LOG_LEVEL=INFO
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
+    volumes:
+      - cognee_data:/data
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ----------------------------------------
+  # Nginx Reverse Proxy (Edge Layer)
+  # ----------------------------------------
+  nginx:
+    image: docker.io/nginx:alpine
+    container_name: ai-agent-nginx
+    restart: unless-stopped
+    networks:
+      - edge_net
+      - app_net
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro
+      - nginx_certs:/etc/nginx/certs:ro
+      - ./deploy/nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+      - directus
+      - gradio
+      - neo4j
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "traefik.enable=false"
+
+  # ----------------------------------------
+  # FastAPI Application (App Layer)
+  # ----------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: production
+    container_name: ai-agent-api
+    restart: unless-stopped
+    networks:
+      - app_net
+      - db_net
+    expose:
+      - "8000"
+    environment:
+      - APP_ENV=production
+      - FASTAPI_HOST=0.0.0.0
+      - FASTAPI_PORT=8000
+      - FASTAPI_WORKERS=4
+      - FASTAPI_RELOAD=false
+      - LOG_LEVEL=INFO
+      - DIRECTUS_URL=http://directus:8055
+      - DIRECTUS_DATABASE=sqlite
+      - DIRECTUS_DATABASE_PATH=/app/artifacts/data.db
+      - COGNEE_VECTOR_STORE=/app/artifacts/embeddings.db
+      - PROMETHEUS_ENABLED=true
+      # Neo4j configuration
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
+      - NEO4J_DATABASE=neo4j
+      # LanceDB configuration
+      - LANCEDB_URI=/app/artifacts/course_vectors.lance
+      - LANCEDB_DIMENSION=384
+      # LLM configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - LLM_MODEL=${LLM_MODEL:-all-minilm}
+      - LLM_CHAT_MODEL=${LLM_CHAT_MODEL:-mistral}
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://ollama:11434}
+      - LLM_API_KEY=${OPENAI_API_KEY:-}
+      # Enable graph features
+      - USE_GRAPH_MEMORY=true
+      - USE_NEO4J_SPATIAL=true
+      # Cognee integration
+      - COGNEE_ENABLED=${COGNEE_ENABLED:-true}
+      - COGNEE_HOST=cognee
+      - COGNEE_PORT=8000
+      - COGNEE_VECTOR_STORE=/app/artifacts/cognee_vectors
+    volumes:
+      - ./artifacts:/app/artifacts:rw
+      - ./logs:/app/logs:rw
+      - lancedb_data:/app/artifacts/course_vectors.lance:rw
+    secrets:
+      - directus_token
+      - openai_api_key
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      directus:
+        condition: service_healthy
+      cognee:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ----------------------------------------
+  # Directus CMS (App Layer + DB Layer)
+  # ----------------------------------------
+  directus:
+    image: docker.io/directus/directus:11
+    container_name: ai-agent-directus
+    restart: unless-stopped
+    networks:
+      - app_net
+      - db_net
+    expose:
+      - "8055"
+    environment:
+      - KEY=${DIRECTUS_KEY:-replace-with-secure-key}
+      - SECRET=${DIRECTUS_SECRET:-replace-with-secure-secret}
+      - ADMIN_EMAIL=${DIRECTUS_ADMIN_EMAIL:-admin@example.com}
+      - ADMIN_PASSWORD=${DIRECTUS_ADMIN_PASSWORD:-admin}
+      - DB_CLIENT=sqlite3
+      - DB_FILENAME=/directus/database/data.db
+      - WEBSOCKETS_ENABLED=true
+      - CORS_ENABLED=true
+      - CORS_ORIGIN=*
+      - TELEMETRY=false
+      # Neo4j bridge configuration
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
+    volumes:
+      - directus_uploads:/directus/uploads
+      - directus_extensions:/directus/extensions
+      - ./artifacts:/directus/database:rw
+      - ./artifacts/models.json:/directus/bootstrap/models.json:ro
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8055/server/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+  # ----------------------------------------
+  # Gradio UI (App Layer)
+  # ----------------------------------------
+  gradio:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: production
+    container_name: ai-agent-gradio
+    restart: unless-stopped
+    networks:
+      - app_net
+    expose:
+      - "7860"
+    environment:
+      - APP_ENV=production
+      - GRADIO_SERVER_NAME=0.0.0.0
+      - GRADIO_SERVER_PORT=7860
+      - API_BASE_URL=http://api:8000
+      # Neo4j for direct queries
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-password}
+    command: ["python", "-m", "src.ui_gradio"]
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+    depends_on:
+      - api
+      - neo4j
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # ----------------------------------------
+  # Streamlit UI (App Layer) - Optional
+  # ----------------------------------------
+  streamlit:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: production
+    container_name: ai-agent-streamlit
+    restart: unless-stopped
+    networks:
+      - app_net
+    expose:
+      - "8501"
+    environment:
+      - APP_ENV=production
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - API_BASE_URL=http://api:8000
+    command: ["streamlit", "run", "src/ui_streamlit.py"]
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+    depends_on:
+      - api
+    profiles:
+      - streamlit
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # ----------------------------------------
+  # Prometheus (App Layer)
+  # ----------------------------------------
+  prometheus:
+    image: docker.io/prom/prometheus:v2.55.0
+    container_name: ai-agent-prometheus
+    restart: unless-stopped
+    networks:
+      - app_net
+    expose:
+      - "9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ----------------------------------------
+  # Grafana (App Layer)
+  # ----------------------------------------
+  grafana:
+    image: docker.io/grafana/grafana:11.3.0
+    container_name: ai-agent-grafana
+    restart: unless-stopped
+    networks:
+      - app_net
+    expose:
+      - "3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://grafana.example.com
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ----------------------------------------
+  # Ollama (DB Layer) - Optional, for local LLM
+  # ----------------------------------------
+  ollama:
+    image: docker.io/ollama/ollama:latest
+    container_name: ai-agent-ollama
+    restart: unless-stopped
+    networks:
+      - db_net
+      - app_net
+    expose:
+      - "11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_PORT=11434
+    profiles:
+      - ollama
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '1.0'
+          memory: 2G

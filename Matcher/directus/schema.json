@@ -1,0 +1,140 @@
+{
+  "$schema": "https://directus.io/schema.json",
+  "version": 1,
+  "directus": "10.0.0",
+  "collections": [
+    {
+      "collection": "profiles",
+      "meta": {
+        "collection": "profiles",
+        "icon": "person",
+        "note": "Extended user profile data for matching",
+        "hidden": false
+      },
+      "schema": {
+        "name": "profiles"
+      }
+    },
+    {
+      "collection": "matches",
+      "meta": {
+        "collection": "matches",
+        "icon": "compare_arrows",
+        "note": "Match records between users",
+        "hidden": false
+      },
+      "schema": {
+        "name": "matches"
+      }
+    },
+    {
+      "collection": "organizations",
+      "meta": {
+        "collection": "organizations",
+        "icon": "business",
+        "note": "Company and organization data",
+        "hidden": false
+      },
+      "schema": {
+        "name": "organizations"
+      }
+    },
+    {
+      "collection": "jobs",
+      "meta": {
+        "collection": "jobs",
+        "icon": "work",
+        "note": "Job listings for matching",
+        "hidden": false
+      },
+      "schema": {
+        "name": "jobs"
+      }
+    },
+    {
+      "collection": "content",
+      "meta": {
+        "collection": "content",
+        "icon": "article",
+        "note": "CMS content pages and blog posts",
+        "hidden": false
+      },
+      "schema": {
+        "name": "content"
+      }
+    }
+  ],
+  "fields": [
+    {
+      "collection": "profiles",
+      "field": "id",
+      "type": "uuid",
+      "meta": { "hidden": true, "interface": "input", "readonly": true },
+      "schema": { "is_primary_key": true, "has_auto_increment": false }
+    },
+    {
+      "collection": "profiles",
+      "field": "user_id",
+      "type": "uuid",
+      "meta": { "interface": "select-dropdown-m2o", "special": ["m2o"] },
+      "schema": { "is_nullable": false }
+    },
+    {
+      "collection": "profiles",
+      "field": "skills",
+      "type": "json",
+      "meta": { "interface": "tags" }
+    },
+    {
+      "collection": "profiles",
+      "field": "experience_years",
+      "type": "integer",
+      "meta": { "interface": "input" }
+    },
+    {
+      "collection": "profiles",
+      "field": "bio",
+      "type": "text",
+      "meta": { "interface": "input-rich-text-html" }
+    },
+    {
+      "collection": "matches",
+      "field": "id",
+      "type": "uuid",
+      "meta": { "hidden": true, "interface": "input", "readonly": true },
+      "schema": { "is_primary_key": true }
+    },
+    {
+      "collection": "matches",
+      "field": "user_a",
+      "type": "uuid",
+      "meta": { "interface": "select-dropdown-m2o" },
+      "schema": { "is_nullable": false }
+    },
+    {
+      "collection": "matches",
+      "field": "user_b",
+      "type": "uuid",
+      "meta": { "interface": "select-dropdown-m2o" },
+      "schema": { "is_nullable": false }
+    },
+    {
+      "collection": "matches",
+      "field": "score",
+      "type": "float",
+      "meta": { "interface": "input" }
+    },
+    {
+      "collection": "matches",
+      "field": "status",
+      "type": "string",
+      "meta": { "interface": "select-dropdown", "options": { "choices": ["pending", "accepted", "rejected"] } }
+    },
+    {
+      "collection": "matches",
+      "field": "created_at",
+      "type": "timestamp",
+      "meta": { "interface": "datetime", "readonly": true, "special": ["date-created"] }
+    }
+  ]
+}

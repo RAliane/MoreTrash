@@ -1,0 +1,84 @@
+{
+  "description": "Deterministic test student preferences for determinism validation",
+  "version": "1.0.0",
+  "seed": 42,
+  "profiles": {
+    "aerospace_engineer": {
+      "math_interest": 0.9,
+      "science_interest": 0.85,
+      "humanities_interest": 0.2,
+      "career_goal": "aerospace_engineer",
+      "learning_style": "analytical",
+      "credits_per_semester": 15,
+      "preferred_difficulty": "advanced",
+      "completed_courses": ["course-math-101", "course-phys-101"],
+      "constraints": ["high_math_required"]
+    },
+    "data_scientist": {
+      "math_interest": 0.8,
+      "science_interest": 0.75,
+      "humanities_interest": 0.4,
+      "career_goal": "data_scientist",
+      "learning_style": "analytical",
+      "credits_per_semester": 12,
+      "preferred_difficulty": "intermediate",
+      "completed_courses": ["course-math-101", "course-cs-101"],
+      "constraints": []
+    },
+    "software_engineer": {
+      "math_interest": 0.75,
+      "science_interest": 0.6,
+      "humanities_interest": 0.3,
+      "career_goal": "software_engineer",
+      "learning_style": "practical",
+      "credits_per_semester": 12,
+      "preferred_difficulty": "intermediate",
+      "completed_courses": ["course-cs-101"],
+      "constraints": []
+    },
+    "mechanical_engineer": {
+      "math_interest": 0.85,
+      "science_interest": 0.8,
+      "humanities_interest": 0.2,
+      "career_goal": "mechanical_engineer",
+      "learning_style": "practical",
+      "credits_per_semester": 15,
+      "preferred_difficulty": "advanced",
+      "completed_courses": ["course-math-101", "course-phys-101"],
+      "constraints": ["high_math_required"]
+    },
+    "humanities_scholar": {
+      "math_interest": 0.2,
+      "science_interest": 0.3,
+      "humanities_interest": 0.95,
+      "career_goal": "philosopher",
+      "learning_style": "conceptual",
+      "credits_per_semester": 12,
+      "preferred_difficulty": "intermediate",
+      "completed_courses": [],
+      "constraints": ["low_math_preferred"]
+    },
+    "balanced_student": {
+      "math_interest": 0.6,
+      "science_interest": 0.6,
+      "humanities_interest": 0.6,
+      "career_goal": "",
+      "learning_style": "mixed",
+      "credits_per_semester": 12,
+      "preferred_difficulty": "intermediate",
+      "completed_courses": ["course-math-101"],
+      "constraints": []
+    },
+    "business_analyst": {
+      "math_interest": 0.5,
+      "science_interest": 0.4,
+      "humanities_interest": 0.6,
+      "career_goal": "business_analyst",
+      "learning_style": "practical",
+      "credits_per_semester": 9,
+      "preferred_difficulty": "intermediate",
+      "completed_courses": [],
+      "constraints": ["evening_classes"]
+    }
+  }
+}

@@ -1,0 +1,83 @@
+# Security Monitoring Configuration
+# Prometheus metrics and alerting rules for security monitoring
+
+# Prometheus scrape configuration for security metrics
+scrape_configs:
+  - job_name: 'matchgorithm-security'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+# Security Alerting Rules
+groups:
+  - name: security_alerts
+    rules:
+
+      # High-severity security issues
+      - alert: HighSeveritySecurityIssues
+        expr: security_scan_failures_total{severity="high"} > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High severity security issues detected"
+          description: "Security scans have detected {{ $value }} high severity issues"
+
+      # Critical vulnerabilities
+      - alert: CriticalVulnerabilitiesDetected
+        expr: security_vulnerabilities_total{severity="critical"} > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical security vulnerabilities detected"
+          description: "Found {{ $value }} critical vulnerabilities that require immediate attention"
+
+      # Secrets detected in repository
+      - alert: SecretsDetectedInRepository
+        expr: security_secrets_detected_total > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Secrets detected in repository"
+          description: "{{ $value }} secrets found in code repository"
+
+      # Failed security scans
+      - alert: SecurityScanFailures
+        expr: security_scan_status{status="failed"} == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Security scan failures detected"
+          description: "Security scanning pipeline has failures"
+
+# Custom security metrics to expose
+# These would be implemented in your application
+security_metrics:
+  - name: security_scan_failures_total
+    type: counter
+    description: "Total number of security scan failures"
+    labels: ["scanner", "severity"]
+
+  - name: security_vulnerabilities_total
+    type: gauge
+    description: "Current number of security vulnerabilities"
+    labels: ["scanner", "severity", "package"]
+
+  - name: security_secrets_detected_total
+    type: gauge
+    description: "Number of secrets detected in repository"
+    labels: ["file", "secret_type"]
+
+  - name: security_scan_status
+    type: gauge
+    description: "Status of security scans (1=failed, 0=passed)"
+    labels: ["scanner", "status"]
+
+  - name: security_container_vulnerabilities_total
+    type: gauge
+    description: "Number of container vulnerabilities"
+    labels: ["severity", "package"]

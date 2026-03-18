@@ -1,0 +1,51 @@
+# Base requirements for FastAPI XGBoost Optimizer
+# Core dependencies required for production deployment
+
+# FastAPI and ASGI
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+
+# Data validation and settings
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Database and ORM
+sqlalchemy>=2.0.25
+asyncpg>=0.29.0
+geoalchemy2>=0.14.0
+psycopg2-binary>=2.9.0
+alembic>=1.13.0
+
+# Machine Learning and Optimization
+xgboost>=2.0.0
+pygad>=3.2.0
+ortools>=9.8.0
+numpy>=1.26.0
+scipy>=1.12.0
+pandas>=2.2.0
+scikit-learn>=1.4.0
+
+# Spatial and Geometric
+shapely>=2.0.0
+geopandas>=0.14.0
+
+# GraphQL and API
+httpx>=0.26.0
+aiohttp>=3.9.0
+
+# Configuration and Logging
+pyyaml>=6.0.1
+python-json-logger>=2.0.0
+structlog>=24.1.0
+
+# Security and Rate Limiting
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+slowapi>=0.1.9
+
+# Utilities
+python-dotenv>=1.0.0
+typer>=0.9.0
+rich>=13.7.0
+tenacity>=8.2.0

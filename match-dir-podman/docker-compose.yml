@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: docker.io/library/nginx
+    ports:
+      - '80:80'
+    hostname: nginx-service
+    networks:
+      - network-alpha
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - directus
+      - n8n
+      - node
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 512M
+    init: true
+
+  directus:
+    image: docker.io/directus/directus:latest
+    ports:
+      - '8055:8055'
+    environment:
+      DIRECTUS_DATABASE_URL: postgres://user:password@db:5432/directus
+    volumes:
+      - directus_data:/var/lib/directus
+    depends_on:
+      - db
+    networks:
+      - network-alpha
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+    env_file:
+      - .env
+    init: true
+    hostname: directus-service
+
+  n8n:
+    image: docker.io/n8nio/n8n:latest
+    ports:
+      - '5678:5678'
+    environment:
+      DB_TYPE: postgres
+      DB_POSTGRESDB: n8n
+      DB_POSTGRESUSER: n8nuser
+      DB_POSTGRESPASSWORD: n8npassword
+      DB_POSTGRESHOST: db
+    volumes:
+      - n8n_data:/root/.n8n
+    depends_on:
+      - db
+    networks:
+      - network-alpha
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+    hostname: n8n
+    init: true
+    env_file:
+      - .env
+
+  node:
+    image: docker.io/library/node:22.21.1
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+    volumes:
+      - ./app:/usr/src/app
+      - ./start.sh:/usr/src/app/start.sh
+    depends_on:
+      - db
+    networks:
+      - network-alpha
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+    hostname: next-js-runtime
+    init: true
+    env_file:
+      - .env
+    command: ["/bin/bash", "/usr/src/app/start.sh", "npm", "run", "dev"]
+
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: directus
+    volumes:
+      - db_data:/var/lib/postgresql/data  # Referencing the volume db_data here
+    networks:
+      - network-alpha
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+    init: true
+    env_file:
+      - .env
+
+networks:
+  network-alpha:
+    driver: bridge
+
+volumes:
+  directus_data: {}  # Persistent volume for Directus data
+  n8n_data: {}       # Persistent volume for N8N data
+  db_data: {}        # Persistent volume for PostgreSQL data

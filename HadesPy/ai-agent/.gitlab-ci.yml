@@ -1,0 +1,589 @@
+# GitLab CI/CD Pipeline
+# AI Agent Full Stack - Directus + FastAPI + FastMCP + Cognee
+# Phase 11: CI/CD Pipeline with Determinism Tests and Security Scanning
+
+stages:
+  - lint
+  - test-unit
+  - test-integration
+  - cognee-integration-test
+  - deterministic-ranking-test
+  - test-determinism
+  - test-database
+  - security
+  - build
+  - deploy-staging
+  - deploy
+
+variables:
+  # Podman/Buildah configuration
+  STORAGE_DRIVER: vfs
+  BUILDAH_FORMAT: docker
+  # Image name
+  IMAGE_NAME: ai-agent
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+  # Registry
+  CI_REGISTRY_IMAGE: $CI_REGISTRY/ai-engineering/ai-agent
+  # CI Environment
+  CI: "true"
+  PYTEST_CURRENT_TEST: "1"
+  # PostgreSQL Configuration (for services)
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_DB: test
+  POSTGRES_USER: test
+  POSTGRES_PASSWORD: test
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_DATABASE: test
+  DB_USER: test
+  DB_PASSWORD: test
+  # Neo4j Configuration (for services)
+  NEO4J_URI: bolt://neo4j:7687
+  NEO4J_USER: neo4j
+  NEO4J_PASSWORD: test
+  NEO4J_AUTH: neo4j/test
+  # Cognee Configuration
+  COGNEE_ENABLED: "true"
+  COGNEE_HOST: cognee
+  COGNEE_PORT: "8000"
+  COGNEE_VECTOR_STORE: /tmp/cognee_vectors
+
+# ============================================
+# Cache Configuration
+# ============================================
+default:
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - .uv/
+      - .pytest_cache/
+      - .ruff_cache/
+      - __pypackages__/
+
+# ============================================
+# Service Templates
+# ============================================
+.pgvector_service: &pgvector_service
+  name: pgvector/pgvector:pg15
+  alias: postgres
+
+.neo4j_service: &neo4j_service
+  name: neo4j:5.15.0-community
+  alias: neo4j
+
+.cognee_service: &cognee_service
+  name: cognee/cognee:latest
+  alias: cognee
+
+# ============================================
+# Lint Stage
+# ============================================
+lint:ruff:
+  stage: lint
+  image: python:3.12-slim
+  before_script:
+    - pip install uv
+    - uv pip install --system ruff
+  script:
+    - ruff check src/
+    - ruff format --check src/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+lint:mypy:
+  stage: lint
+  image: python:3.12-slim
+  before_script:
+    - pip install uv
+    - uv pip install --system -e ".[dev]"
+  script:
+    - mypy src/ --ignore-missing-imports
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ============================================
+# Test Unit Stage
+# ============================================
+test:unit:
+  stage: test-unit
+  image: python:3.12-slim
+  services:
+    - docker:dind
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - apt-get update && apt-get install -y git
+    - pip install uv
+    - uv pip install --system -e ".[dev]"
+  script:
+    - pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing -m "not integration and not slow and not determinism"
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - coverage.xml
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ============================================
+# Test Integration Stage (PostgreSQL + Neo4j)
+# ============================================
+test:integration:
+  stage: test-integration
+  image: python:3.12-slim
+  services:
+    - <<: *pgvector_service
+    - <<: *neo4j_service
+  variables:
+    # Service health check settings
+    POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    NEO4J_PLUGINS: '["apoc"]'
+    NEO4J_dbms_memory_heap_initial__size: 512m
+    NEO4J_dbms_memory_heap_max__size: 512m
+  before_script:
+    - apt-get update && apt-get install -y git postgresql-client netcat-openbsd
+    - pip install uv
+    - uv pip install --system -e ".[dev]"
+    # Wait for PostgreSQL to be ready
+    - |
+      echo "Waiting for PostgreSQL to be ready..."
+      for i in {1..30}; do
+        if nc -z postgres 5432; then
+          echo "PostgreSQL is ready!"
+          break
+        fi
+        echo "Waiting for PostgreSQL... ($i/30)"
+        sleep 2
+      done
+    # Wait for Neo4j to be ready
+    - |
+      echo "Waiting for Neo4j to be ready..."
+      for i in {1..30}; do
+        if nc -z neo4j 7687; then
+          echo "Neo4j is ready!"
+          break
+        fi
+        echo "Waiting for Neo4j... ($i/30)"
+        sleep 2
+      done
+    # Setup test environment
+    - chmod +x scripts/ci/setup_test_env.sh
+    - scripts/ci/setup_test_env.sh
+  script:
+    # Run RAG pipeline integration tests
+    - pytest tests/test_rag_pipeline.py -v -m integration --timeout=300
+    # Run XGBoost ranking integration tests
+    - pytest tests/test_xgboost_ranking.py -v -m integration --timeout=300
+  timeout: 20 minutes
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - src/rag/**/*
+        - src/ranking/**/*
+        - src/database/**/*
+        - migrations/**/*
+
+# ============================================
+# Cognee Integration Test Stage
+# ============================================
+test:cognee-integration:
+  stage: cognee-integration-test
+  image: python:3.12-slim
+  services:
+    - <<: *pgvector_service
+    - <<: *neo4j_service
+    - <<: *cognee_service
+  variables:
+    NEO4J_PLUGINS: '["apoc"]'
+    NEO4J_dbms_memory_heap_initial__size: 512m
+    NEO4J_dbms_memory_heap_max__size: 512m
+    COGNEE_VECTOR_STORE: /tmp/cognee_test
+  before_script:
+    - apt-get update && apt-get install -y git netcat-openbsd
+    - pip install uv
+    - uv pip install --system -e ".[dev]"
+    # Wait for PostgreSQL
+    - |
+      echo "Waiting for PostgreSQL..."
+      for i in {1..30}; do
+        nc -z postgres 5432 && echo "PostgreSQL ready!" && break
+        echo "Waiting... ($i/30)"
+        sleep 2
+      done
+    # Wait for Neo4j
+    - |
+      echo "Waiting for Neo4j..."
+      for i in {1..30}; do
+        nc -z neo4j 7687 && echo "Neo4j ready!" && break
+        echo "Waiting... ($i/30)"
+        sleep 2
+      done
+    # Wait for Cognee
+    - |
+      echo "Waiting for Cognee..."
+      for i in {1..30}; do
+        nc -z cognee 8000 && echo "Cognee ready!" && break
+        echo "Waiting... ($i/30)"
+        sleep 2
+      done
+    - chmod +x scripts/ci/setup_test_env.sh
+    - scripts/ci/setup_test_env.sh
+  script:
+    # Run Cognee adapter unit tests
+    - pytest tests/test_cognee_adapter.py -v -m "cognee or integration" --timeout=300
+    # Run Cognee integration tests
+    - pytest tests/integrations/test_cognee_integration.py -v -m "cognee" --timeout=600
+  timeout: 20 minutes
+  allow_failure: false  # MUST pass - Cognee integration is critical
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - src/integrations/cognee_adapter.py
+        - src/integrations/**/*cognee*
+        - tests/**/test_cognee*
+
+# ============================================
+# Deterministic Ranking Test Stage (20 Iterations)
+# ============================================
+test:deterministic-ranking:
+  stage: deterministic-ranking-test
+  image: python:3.12-slim
+  services:
+    - <<: *pgvector_service
+    - <<: *neo4j_service
+  variables:
+    NEO4J_PLUGINS: '["apoc"]'
+    NEO4J_dbms_memory_heap_initial__size: 512m
+    NEO4J_dbms_memory_heap_max__size: 512m
+    DETERMINISM_ITERATIONS: "20"  # Run 20 iterations as per spec
+  before_script:
+    - apt-get update && apt-get install -y git netcat-openbsd
+    - pip install uv
+    - uv pip install --system -e ".[dev]"
+    # Wait for PostgreSQL
+    - |
+      echo "Waiting for PostgreSQL..."
+      for i in {1..30}; do
+        nc -z postgres 5432 && echo "PostgreSQL ready!" && break
+        echo "Waiting... ($i/30)"
+        sleep 2
+      done
+    # Wait for Neo4j
+    - |
+      echo "Waiting for Neo4j..."
+      for i in {1..30}; do
+        nc -z neo4j 7687 && echo "Neo4j ready!" && break
+        echo "Waiting... ($i/30)"
+        sleep 2
+      done
+    - chmod +x scripts/ci/setup_test_env.sh
+    - scripts/ci/setup_test_env.sh
+  script:
+    # Run the 20-iteration determinism test script
+    - chmod +x scripts/ci/run_determinism_tests.sh
+    - scripts/ci/run_determinism_tests.sh
+    # Run pytest deterministic ranking tests
+    - pytest tests/test_determinism.py -v -m "determinism" --timeout=900
+  timeout: 25 minutes
+  allow_failure: false  # MUST pass - determinism is critical per spec
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - src/ranking/**/*
+        - src/rag/**/*
+
+# ============================================
+# Test Determinism Stage
+# ============================================
+test:determinism:
+  stage: test-determinism
+  image: python:3.12-slim
+  services:
+    - <<: *pgvector_service
+    - <<: *neo4j_service
+  variables:
+    NEO4J_PLUGINS: '["apoc"]'
+    NEO4J_dbms_memory_heap_initial__size: 512m
+    NEO4J_dbms_memory_heap_max__size: 512m
+  before_script:
+    - apt-get update && apt-get install -y git netcat-openbsd
+    - pip install uv
+    - uv pip install --system -e ".[dev]"
+    # Wait for services
+    - |
+      echo "Waiting for PostgreSQL..."
+      for i in {1..30}; do
+        nc -z postgres 5432 && echo "PostgreSQL ready!" && break
+        echo "Waiting... ($i/30)"
+        sleep 2
+      done
+    - |
+      echo "Waiting for Neo4j..."
+      for i in {1..30}; do
+        nc -z neo4j 7687 && echo "Neo4j ready!" && break
+        echo "Waiting... ($i/30)"
+        sleep 2
+      done
+    - chmod +x scripts/ci/setup_test_env.sh
+    - scripts/ci/setup_test_env.sh
+  script:
+    # Run determinism validation script
+    - python scripts/ci/verify_determinism.py
+    # Run determinism pytest suite
+    - pytest tests/test_determinism.py -v --timeout=600
+  timeout: 15 minutes
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - src/rag/**/*
+        - src/ranking/**/*
+        - src/llm/**/*
+  allow_failure: false  # MUST pass - determinism is critical
+
+# ============================================
+# Test Database Stage (Migrations)
+# ============================================
+test:database:
+  stage: test-database
+  image: python:3.12-slim
+  services:
+    - <<: *pgvector_service
+  variables:
+    POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+  before_script:
+    - apt-get update && apt-get install -y git netcat-openbsd
+    - pip install uv
+    - uv pip install --system -e ".[dev]"
+    # Wait for PostgreSQL
+    - |
+      echo "Waiting for PostgreSQL..."
+      for i in {1..30}; do
+        nc -z postgres 5432 && echo "PostgreSQL ready!" && break
+        echo "Waiting... ($i/30)"
+        sleep 2
+      done
+  script:
+    # Test database migrations
+    - python scripts/ci/test_migrations.py
+    # Verify migrations with pytest
+    - pytest tests/test_spatial_migration.py -v -m migration --timeout=120
+  timeout: 10 minutes
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - migrations/**/*
+        - src/database/**/*
+
+# ============================================
+# Security Stage
+# ============================================
+security:bandit:
+  stage: security
+  image: python:3.12-slim
+  before_script:
+    - pip install bandit
+  script:
+    # Run bandit with JSON output for reporting
+    - bandit -r src/ -f json -o bandit-report.json -ll || true
+    # Run bandit with strict mode - FAIL on HIGH severity issues
+    - bandit -r src/ -ll -ii --exit-zero || EXIT_CODE=$?
+    - |
+      if [ -n "$EXIT_CODE" ] && [ "$EXIT_CODE" -ne 0 ]; then
+        echo "ERROR: Bandit found HIGH severity security issues!"
+        exit 1
+      fi
+    # Check for HIGH severity issues explicitly
+    - |
+      HIGH_COUNT=$(bandit -r src/ -ll -ii 2>&1 | grep -c "SEVERITY:HIGH" || true)
+      if [ "$HIGH_COUNT" -gt 0 ]; then
+        echo "ERROR: Found $HIGH_COUNT HIGH severity security issues!"
+        bandit -r src/ -ll -ii
+        exit 1
+      fi
+      echo "✓ No HIGH severity security issues found"
+  artifacts:
+    paths:
+      - bandit-report.json
+    expire_in: 1 week
+  allow_failure: false  # FAIL build on security issues per spec
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+security:pip-audit:
+  stage: security
+  image: python:3.12-slim
+  before_script:
+    - pip install pip-audit
+  script:
+    # Run pip-audit with JSON output for reporting
+    - pip-audit --requirement pyproject.toml --format=json --output=pip-audit-report.json || true
+    # Run pip-audit with strict mode - FAIL on vulnerabilities
+    - pip-audit --requirement pyproject.toml --desc --verbose
+    # Check for HIGH/CRITICAL vulnerabilities
+    - |
+      VULN_COUNT=$(pip-audit --requirement pyproject.toml --format=json 2>/dev/null | grep -c "vulnerabilities" || true)
+      if [ -n "$VULN_COUNT" ] && [ "$VULN_COUNT" -gt 0 ]; then
+        echo "WARNING: Found vulnerabilities in dependencies"
+        pip-audit --requirement pyproject.toml --desc
+      fi
+  artifacts:
+    paths:
+      - pip-audit-report.json
+    expire_in: 1 week
+  allow_failure: true  # Allow to fail but report issues
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+security:trivy:
+  stage: security
+  image: aquasec/trivy:latest
+  script:
+    # Run trivy filesystem scan with JSON output
+    - trivy filesystem --exit-code 0 --no-progress --format json -o trivy-report.json .
+    # Run trivy with strict mode - FAIL on HIGH,CRITICAL vulnerabilities
+    - trivy filesystem --exit-code 1 --severity HIGH,CRITICAL --no-progress .
+  artifacts:
+    paths:
+      - trivy-report.json
+    expire_in: 1 week
+  allow_failure: false  # FAIL build on HIGH/CRITICAL vulnerabilities per spec
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ============================================
+# Build Stage
+# ============================================
+build:podman:
+  stage: build
+  image: quay.io/podman/stable:latest
+  services:
+    - docker:dind
+  variables:
+    STORAGE_DRIVER: vfs
+  before_script:
+    - podman --version
+    - buildah --version
+  script:
+    # Build multi-stage image
+    - podman build
+      --format docker
+      --target production
+      --tag $IMAGE_NAME:$IMAGE_TAG
+      --tag $IMAGE_NAME:latest
+      .
+
+    # Test the image
+    - podman run --rm $IMAGE_NAME:$IMAGE_TAG python -c "import src; print('Import OK')"
+
+    # Save image for deployment
+    - podman save -o $IMAGE_NAME-$IMAGE_TAG.tar $IMAGE_NAME:$IMAGE_TAG
+    - gzip $IMAGE_NAME-$IMAGE_TAG.tar
+  artifacts:
+    paths:
+      - $IMAGE_NAME-$IMAGE_TAG.tar.gz
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+build:registry:
+  stage: build
+  image: quay.io/podman/stable:latest
+  services:
+    - docker:dind
+  variables:
+    STORAGE_DRIVER: vfs
+  before_script:
+    - podman login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - podman build
+      --format docker
+      --target production
+      --tag $CI_REGISTRY_IMAGE:$IMAGE_TAG
+      --tag $CI_REGISTRY_IMAGE:latest
+      .
+    - podman push $CI_REGISTRY_IMAGE:$IMAGE_TAG
+    - podman push $CI_REGISTRY_IMAGE:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ============================================
+# Deploy Staging Stage
+# ============================================
+deploy:staging:
+  stage: deploy-staging
+  image: quay.io/podman/stable:latest
+  environment:
+    name: staging
+    url: https://api-staging.example.com
+  before_script:
+    - podman --version
+    - podman-compose --version
+  script:
+    # Load the built image
+    - gunzip -c $IMAGE_NAME-$IMAGE_TAG.tar.gz | podman load
+
+    # Deploy to staging
+    - podman-compose -f podman-compose.yml -p ai-agent-staging up -d
+
+    # Health check
+    - sleep 10
+    - curl -f http://localhost:8000/health || exit 1
+  rules:
+    - if: $CI_COMMIT_BRANCH == "staging"
+
+# ============================================
+# Deploy Production Stage
+# ============================================
+deploy:production:
+  stage: deploy
+  image: alpine:latest
+  environment:
+    name: production
+    url: https://api.example.com
+  before_script:
+    - apk add --no-cache openssh-client rsync
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+  script:
+    # Copy compose file and configs
+    - rsync -avz --delete
+      --exclude='.git'
+      --exclude='*.tar.gz'
+      ./ $DEPLOY_USER@$DEPLOY_HOST:/opt/ai-agent/
+
+    # Deploy on remote server
+    - ssh $DEPLOY_USER@$DEPLOY_HOST "
+        cd /opt/ai-agent &&
+        podman-compose pull &&
+        podman-compose up -d &&
+        podman system prune -f
+      "
+
+    # Verify deployment
+    - ssh $DEPLOY_USER@$DEPLOY_HOST "
+        curl -f http://localhost:8000/health
+      "
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+  when: manual
+  only:
+    - tags

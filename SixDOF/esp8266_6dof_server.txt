@@ -1,0 +1,437 @@
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_GrayOLED.h>
+#include <Adafruit_SPITFT.h>
+#include <Adafruit_SPITFT_Macros.h>
+#include <gfxfont.h>
+#include "WiFi.h"
+#include <MUIU8g2.h>
+#include <U8g2lib.h>
+#include <U8x8lib.h>
+#include <Arduino_JSON.h>
+#include <Adafruit_SSD1306.h>
+#include <splash.h>
+#include <AsyncUDP.h>
+
+const char *ssid = "TheOracle";
+const char *password = "D0y0usp3AK0R4CL353";
+
+// ============================================================================
+// OLED DISPLAY SETUP
+// ============================================================================
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+#define SCREEN_ADDRESS 0x3D
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// ============================================================================
+// TELEMETRY DATA STRUCTURE
+// ============================================================================
+
+typedef struct {
+    // Position (m)
+    double pos_x;
+    double pos_y;
+    double pos_z;
+    
+    // Velocity (m/s)
+    double vel_x;
+    double vel_y;
+    double vel_z;
+    double airspeed;
+    
+    // Orientation (Quaternion)
+    double q_w, q_x, q_y, q_z;
+    
+    // Engine
+    double thrust;
+    double fuel_flow;
+    double throttle;
+    
+    // Mass
+    double fuel_mass;
+    double total_mass;
+    
+    // Atmosphere
+    double altitude;
+    double air_density;
+    
+    // Metadata
+    unsigned long lastUpdateTime;
+    bool dataValid;
+} TelemetryData;
+
+// ============================================================================
+// GLOBAL VARIABLES
+// ============================================================================
+
+AsyncUDP udp;
+TelemetryData telemetry = {0};
+unsigned long lastDataTime = 0;
+const unsigned long DATA_TIMEOUT = 2000; // 2 second timeout
+
+// Display update timing
+unsigned long lastDisplayUpdate = 0;
+const unsigned long DISPLAY_UPDATE_INTERVAL = 200; // Update display every 200ms
+int displayPage = 0;
+const int NUM_DISPLAY_PAGES = 3; // We'll create 3 different display pages
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+void parseTelemetryJSON(const char *jsonString) {
+    JSONVar data = JSON.parse(jsonString);
+    
+    if (JSON.typeof(data) == "undefined") {
+        Serial.println("Failed to parse JSON");
+        return;
+    }
+    
+    // Extract position
+    if (data.hasOwnProperty("pos_x")) telemetry.pos_x = (double)data["pos_x"];
+    if (data.hasOwnProperty("pos_y")) telemetry.pos_y = (double)data["pos_y"];
+    if (data.hasOwnProperty("pos_z")) telemetry.pos_z = (double)data["pos_z"];
+    
+    // Extract velocity
+    if (data.hasOwnProperty("vel_x")) telemetry.vel_x = (double)data["vel_x"];
+    if (data.hasOwnProperty("vel_y")) telemetry.vel_y = (double)data["vel_y"];
+    if (data.hasOwnProperty("vel_z")) telemetry.vel_z = (double)data["vel_z"];
+    if (data.hasOwnProperty("airspeed")) telemetry.airspeed = (double)data["airspeed"];
+    
+    // Extract orientation
+    if (data.hasOwnProperty("q_w")) telemetry.q_w = (double)data["q_w"];
+    if (data.hasOwnProperty("q_x")) telemetry.q_x = (double)data["q_x"];
+    if (data.hasOwnProperty("q_y")) telemetry.q_y = (double)data["q_y"];
+    if (data.hasOwnProperty("q_z")) telemetry.q_z = (double)data["q_z"];
+    
+    // Extract engine data
+    if (data.hasOwnProperty("thrust")) telemetry.thrust = (double)data["thrust"];
+    if (data.hasOwnProperty("fuel_flow")) telemetry.fuel_flow = (double)data["fuel_flow"];
+    if (data.hasOwnProperty("throttle")) telemetry.throttle = (double)data["throttle"];
+    
+    // Extract mass
+    if (data.hasOwnProperty("fuel_mass")) telemetry.fuel_mass = (double)data["fuel_mass"];
+    if (data.hasOwnProperty("total_mass")) telemetry.total_mass = (double)data["total_mass"];
+    
+    // Extract atmosphere
+    if (data.hasOwnProperty("altitude")) telemetry.altitude = (double)data["altitude"];
+    if (data.hasOwnProperty("air_density")) telemetry.air_density = (double)data["air_density"];
+    
+    telemetry.lastUpdateTime = millis();
+    telemetry.dataValid = true;
+    lastDataTime = millis();
+    
+    Serial.println("Telemetry parsed successfully");
+}
+
+bool isDataStale() {
+    return (millis() - lastDataTime) > DATA_TIMEOUT;
+}
+
+// Convert quaternion to pitch/roll/yaw (simple approximation)
+void quatToEuler(double &pitch, double &roll, double &yaw) {
+    // Roll (x-axis)
+    double sinr_cosp = 2 * (telemetry.q_w * telemetry.q_x + telemetry.q_y * telemetry.q_z);
+    double cosr_cosp = 1 - 2 * (telemetry.q_x * telemetry.q_x + telemetry.q_y * telemetry.q_y);
+    roll = atan2(sinr_cosp, cosr_cosp) * 180.0 / PI;
+    
+    // Pitch (y-axis)
+    double sinp = 2 * (telemetry.q_w * telemetry.q_y - telemetry.q_z * telemetry.q_x);
+    if (abs(sinp) >= 1) {
+        pitch = copysign(90.0, sinp);
+    } else {
+        pitch = asin(sinp) * 180.0 / PI;
+    }
+    
+    // Yaw (z-axis)
+    double siny_cosp = 2 * (telemetry.q_w * telemetry.q_z + telemetry.q_x * telemetry.q_y);
+    double cosy_cosp = 1 - 2 * (telemetry.q_y * telemetry.q_y + telemetry.q_z * telemetry.q_z);
+    yaw = atan2(siny_cosp, cosy_cosp) * 180.0 / PI;
+}
+
+// ============================================================================
+// DISPLAY FUNCTIONS
+// ============================================================================
+
+void displayPage0_Position() {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    
+    display.println(F("=== POSITION & ALTITUDE ==="));
+    display.println();
+    
+    display.print(F("X: "));
+    display.print(telemetry.pos_x, 1);
+    display.println(F(" m"));
+    
+    display.print(F("Y: "));
+    display.print(telemetry.pos_y, 1);
+    display.println(F(" m"));
+    
+    display.print(F("Z (Alt): "));
+    display.print(telemetry.pos_z, 1);
+    display.println(F(" m"));
+    
+    display.println();
+    display.setTextSize(2);
+    display.print(F("Alt: "));
+    display.print((int)telemetry.pos_z);
+    display.println(F("m"));
+    
+    display.display();
+}
+
+void displayPage1_Velocity() {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    
+    display.println(F("=== VELOCITY & AIRSPEED ==="));
+    display.println();
+    
+    display.print(F("Vx: "));
+    display.print(telemetry.vel_x, 1);
+    display.println(F(" m/s"));
+    
+    display.print(F("Vy: "));
+    display.print(telemetry.vel_y, 1);
+    display.println(F(" m/s"));
+    
+    display.print(F("Vz: "));
+    display.print(telemetry.vel_z, 1);
+    display.println(F(" m/s"));
+    
+    display.println();
+    display.setTextSize(2);
+    display.print(F("Spd: "));
+    display.print((int)telemetry.airspeed);
+    display.println(F("m/s"));
+    
+    display.display();
+}
+
+void displayPage2_EngineAndAttitude() {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    
+    display.println(F("=== ENGINE & ATTITUDE ==="));
+    display.println();
+    
+    // Throttle and fuel
+    display.print(F("Throttle: "));
+    display.print((int)(telemetry.throttle * 100));
+    display.println(F("%"));
+    
+    display.print(F("Fuel: "));
+    display.print(telemetry.fuel_mass, 1);
+    display.println(F(" kg"));
+    
+    display.print(F("Thrust: "));
+    display.print((int)telemetry.thrust);
+    display.println(F(" N"));
+    
+    display.println();
+    
+    // Attitude
+    double pitch, roll, yaw;
+    quatToEuler(pitch, roll, yaw);
+    
+    display.print(F("P:"));
+    display.print((int)pitch);
+    display.print(F(" R:");
+    display.print((int)roll);
+    display.print(F(" Y:"));
+    display.println((int)yaw);
+    
+    display.display();
+}
+
+void displayConnectionStatus() {
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(10, 20);
+    
+    if (isDataStale()) {
+        display.println(F("NO DATA"));
+        display.setCursor(0, 45);
+        display.setTextSize(1);
+        display.println(F("Waiting for telemetry..."));
+    } else {
+        display.println(F("CONNECTED"));
+        display.setCursor(0, 45);
+        display.setTextSize(1);
+        display.print(F("Data age: "));
+        display.print((millis() - lastDataTime) / 1000);
+        display.println(F("s"));
+    }
+    
+    display.display();
+}
+
+void updateDisplay() {
+    if (isDataStale()) {
+        displayConnectionStatus();
+        return;
+    }
+    
+    // Cycle through display pages with wraparound
+    if (millis() - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL) {
+        static int pageCounter = 0;
+        displayPage = pageCounter % NUM_DISPLAY_PAGES;
+        pageCounter++;
+        lastDisplayUpdate = millis();
+    }
+    
+    // Draw the appropriate page
+    switch (displayPage) {
+        case 0:
+            displayPage0_Position();
+            break;
+        case 1:
+            displayPage1_Velocity();
+            break;
+        case 2:
+            displayPage2_EngineAndAttitude();
+            break;
+        default:
+            displayPage0_Position();
+            break;
+    }
+    
+    // Draw page indicator at bottom
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(115, 57);
+    display.print(displayPage + 1);
+    display.display();
+}
+
+// ============================================================================
+// SETUP
+// ============================================================================
+
+void setup() {
+    Serial.begin(115200);
+    delay(1000);
+    
+    Serial.println("\n\nStarting ESP8266 6DoF Telemetry Server...");
+    
+    // Initialize OLED display
+    if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+        Serial.println(F("SSD1306 allocation failed"));
+        while (1);
+    }
+    
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println(F("Initializing..."));
+    display.display();
+    
+    // WiFi connection
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, password);
+    
+    Serial.print("Connecting to WiFi");
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+        delay(500);
+        Serial.print(".");
+        attempts++;
+    }
+    
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("\nWiFi Failed");
+        display.clearDisplay();
+        display.setTextSize(1);
+        display.setTextColor(SSD1306_WHITE);
+        display.setCursor(0, 0);
+        display.println(F("WiFi Failed"));
+        display.display();
+        while (1) delay(1000);
+    }
+    
+    Serial.println("\nWiFi connected");
+    Serial.print("ESP8266 IP: ");
+    Serial.println(WiFi.localIP());
+    
+    // Update display with WiFi info
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println(F("WiFi Connected"));
+    display.println(WiFi.localIP());
+    display.println(F("Listening on port 1234"));
+    display.display();
+    delay(2000);
+    
+    // Start UDP server
+    if (udp.listen(1234)) {
+        Serial.print("UDP Listening on IP: ");
+        Serial.println(WiFi.localIP());
+        
+        // Set up packet receive handler
+        udp.onPacket([](AsyncUDPPacket packet) {
+            Serial.print("Received UDP packet from ");
+            Serial.print(packet.remoteIP());
+            Serial.print(":");
+            Serial.println(packet.remotePort());
+            
+            // Convert packet data to string
+            char buffer[1024] = {0};
+            memcpy(buffer, packet.data(), packet.length());
+            
+            Serial.print("Data: ");
+            Serial.println(buffer);
+            
+            // Check if it's JSON telemetry or plain text
+            if (buffer[0] == '{') {
+                // It's JSON telemetry data
+                parseTelemetryJSON(buffer);
+            } else {
+                // It's a text message (like initial handshake)
+                Serial.println(buffer);
+            }
+            
+            // Send acknowledgment
+            packet.printf("Server received %u bytes", packet.length());
+        });
+        
+        Serial.println("UDP server started");
+    } else {
+        Serial.println("Failed to start UDP server");
+        while (1) delay(1000);
+    }
+    
+    // Display initial screen
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println(F("Waiting for data..."));
+    display.display();
+}
+
+// ============================================================================
+// MAIN LOOP
+// ============================================================================
+
+void loop() {
+    // Update display (this will handle data staleness and page cycling)
+    updateDisplay();
+    
+    delay(10);
+}

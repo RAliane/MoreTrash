@@ -1,0 +1,73 @@
+# Prometheus Alerting Rules
+# AI Agent Full Stack
+
+groups:
+  - name: ai-agent-alerts
+    rules:
+      # API Health Alert
+      - alert: APIHighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate on API"
+          description: "Error rate is above 10% for more than 5 minutes"
+
+      - alert: APIHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency"
+          description: "95th percentile latency is above 1 second"
+
+      - alert: APIDown
+        expr: up{job="fastapi"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API is down"
+          description: "FastAPI application is not responding"
+
+      # Directus Health Alert
+      - alert: DirectusDown
+        expr: up{job="directus"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Directus is down"
+          description: "Directus CMS is not responding"
+
+      # Memory Usage Alert
+      - alert: HighMemoryUsage
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is above 85%"
+
+      # Disk Usage Alert
+      - alert: HighDiskUsage
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk usage"
+          description: "Disk usage is above 90%"
+
+      # Nginx Alerts
+      - alert: NginxHighConnections
+        expr: nginx_connections_active > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Nginx connections"
+          description: "Nginx active connections are above 1000"

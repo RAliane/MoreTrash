@@ -1,0 +1,3 @@
+{
+  "/api/analytics/duckdb/route": "app/api/analytics/duckdb/route.js"
+}

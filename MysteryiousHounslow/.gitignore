@@ -1,0 +1,60 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+/dist/
+/build/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+
+# Database
+*.sqlite
+*.db
+*.sql.gz
+
+# Secrets
+*.pem
+*.key
+secrets/
+
+# Docker/Podman
+*.tar
+
+# Directus
+directus/uploads/
+directus/extensions/
+
+# Documentation build
+docs/_build/
+
+# Separate projects
+AI-Prompting-Guide-in-TOML/
+How-to-build-YOUR-AI-Apps/

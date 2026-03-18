@@ -1,0 +1,34 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v3
+        - name: Run Trivy
+          uses: aquasecurity/trivy-action@master
+          with:
+            scan-type: 'fs'
+            ignore-unfixed: true
+            severity: 'CRITICAL,HIGH'
+        - name: Run Bandit
+          run: |
+            pip install bandit
+            bandit -r src/backend/ -f json -o bandit-report.json
+          continue-on-error: true
+        - name: Run Cargo Audit
+          run: cargo audit
+        - name: Upload security reports
+          uses: actions/upload-artifact@v3
+          with:
+            name: security-reports
+            path: |
+              bandit-report.json
+              trivy-report.json

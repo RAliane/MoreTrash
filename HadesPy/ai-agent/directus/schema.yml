@@ -1,0 +1,617 @@
+# Directus Schema Definition
+# PostgreSQL + pgvector Backend
+# 
+# This schema defines:
+# - courses collection with vector embeddings
+# - students collection with vector embeddings
+# - recommendations collection with relations
+#
+# Import with: npx directus schema apply ./schema.yml
+
+version: 1
+
+directus: 10.8.0
+collections:
+  # ============================================
+  # COURSES COLLECTION
+  # ============================================
+  - collection: courses
+    meta:
+      collection: courses
+      icon: school
+      note: University courses with embeddings for recommendation matching
+      display_template: "{{name}} ({{department}})"
+      archive_field: status
+      archive_app_filter: true
+      archive_value: archived
+      unarchive_value: published
+      sort_field: name
+      accountability: all
+    schema:
+      name: courses
+      sql: |
+        CREATE TABLE IF NOT EXISTS courses (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          department VARCHAR(100) NOT NULL,
+          credits INTEGER DEFAULT 3,
+          math_intensity FLOAT DEFAULT 0.0,
+          humanities_intensity FLOAT DEFAULT 0.0,
+          career_paths JSONB DEFAULT '[]',
+          embedding VECTOR(384),
+          status VARCHAR(20) DEFAULT 'published',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- Create index for vector similarity search
+        CREATE INDEX IF NOT EXISTS courses_embedding_idx 
+        ON courses USING ivfflat (embedding vector_cosine_ops);
+        
+        -- Create index for department queries
+        CREATE INDEX IF NOT EXISTS courses_department_idx 
+        ON courses(department);
+    fields:
+      - field: id
+        type: uuid
+        meta:
+          interface: input
+          readonly: true
+          required: true
+        schema:
+          is_primary_key: true
+          has_auto_increment: false
+      
+      - field: name
+        type: string
+        meta:
+          interface: input
+          required: true
+          options:
+            placeholder: "Course name"
+        schema:
+          max_length: 255
+          is_nullable: false
+      
+      - field: description
+        type: text
+        meta:
+          interface: input-multiline
+          options:
+            placeholder: "Course description"
+        schema:
+          is_nullable: true
+      
+      - field: department
+        type: string
+        meta:
+          interface: select-dropdown
+          required: true
+          options:
+            choices:
+              - text: "Computer Science"
+                value: "cs"
+              - text: "Engineering"
+                value: "engineering"
+              - text: "Mathematics"
+                value: "math"
+              - text: "Humanities"
+                value: "humanities"
+              - text: "Data Science"
+                value: "data_science"
+              - text: "Philosophy"
+                value: "philosophy"
+        schema:
+          max_length: 100
+          is_nullable: false
+      
+      - field: credits
+        type: integer
+        meta:
+          interface: input
+          required: true
+          options:
+            min: 1
+            max: 12
+        schema:
+          default_value: 3
+          is_nullable: false
+      
+      - field: math_intensity
+        type: float
+        meta:
+          interface: slider
+          options:
+            min: 0.0
+            max: 1.0
+            step: 0.01
+            show_tick_marks: true
+        schema:
+          default_value: 0.0
+          is_nullable: false
+      
+      - field: humanities_intensity
+        type: float
+        meta:
+          interface: slider
+          options:
+            min: 0.0
+            max: 1.0
+            step: 0.01
+            show_tick_marks: true
+        schema:
+          default_value: 0.0
+          is_nullable: false
+      
+      - field: career_paths
+        type: json
+        meta:
+          interface: list
+          options:
+            template: "{{value}}"
+        schema:
+          default_value: []
+          is_nullable: true
+      
+      - field: embedding
+        type: json
+        meta:
+          interface: list
+          readonly: true
+          note: "384-dimensional vector for similarity search (pgvector)"
+          options:
+            template: "[{{length}} dims]"
+        schema:
+          is_nullable: true
+          comment: "Stored as float[] and converted to vector type in PostgreSQL"
+      
+      - field: status
+        type: string
+        meta:
+          interface: select-dropdown
+          options:
+            choices:
+              - text: "Published"
+                value: "published"
+              - text: "Draft"
+                value: "draft"
+              - text: "Archived"
+                value: "archived"
+        schema:
+          default_value: "published"
+          is_nullable: false
+      
+      - field: created_at
+        type: timestamp
+        meta:
+          interface: datetime
+          readonly: true
+          special:
+            - date-created
+        schema:
+          is_nullable: false
+      
+      - field: updated_at
+        type: timestamp
+        meta:
+          interface: datetime
+          readonly: true
+          special:
+            - date-updated
+        schema:
+          is_nullable: false
+
+  # ============================================
+  # COURSE PREREQUISITES (Many-to-Many)
+  # ============================================
+  - collection: courses_prerequisites
+    meta:
+      collection: courses_prerequisites
+      icon: account_tree
+      note: Junction table for course prerequisites
+      hidden: true
+    schema:
+      name: courses_prerequisites
+      sql: |
+        CREATE TABLE IF NOT EXISTS courses_prerequisites (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+          prerequisite_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(course_id, prerequisite_id)
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_course_prereq_course 
+        ON courses_prerequisites(course_id);
+        CREATE INDEX IF NOT EXISTS idx_course_prereq_prereq 
+        ON courses_prerequisites(prerequisite_id);
+    fields:
+      - field: id
+        type: uuid
+        meta:
+          readonly: true
+          required: true
+        schema:
+          is_primary_key: true
+      
+      - field: course_id
+        type: uuid
+        meta:
+          interface: select-dropdown-m2o
+          required: true
+          options:
+            template: "{{name}}"
+        schema:
+          is_nullable: false
+          foreign_key_table: courses
+          foreign_key_column: id
+      
+      - field: prerequisite_id
+        type: uuid
+        meta:
+          interface: select-dropdown-m2o
+          required: true
+          options:
+            template: "{{name}}"
+        schema:
+          is_nullable: false
+          foreign_key_table: courses
+          foreign_key_column: id
+
+  # ============================================
+  # STUDENTS COLLECTION
+  # ============================================
+  - collection: students
+    meta:
+      collection: students
+      icon: person
+      note: Students with preferences and embeddings
+      display_template: "{{name}}"
+      accountability: all
+    schema:
+      name: students
+      sql: |
+        CREATE TABLE IF NOT EXISTS students (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name VARCHAR(255) NOT NULL,
+          preferences JSONB DEFAULT '{}',
+          career_goal VARCHAR(255),
+          embedding VECTOR(384),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        -- Create index for vector similarity search
+        CREATE INDEX IF NOT EXISTS students_embedding_idx 
+        ON students USING ivfflat (embedding vector_cosine_ops);
+    fields:
+      - field: id
+        type: uuid
+        meta:
+          interface: input
+          readonly: true
+          required: true
+        schema:
+          is_primary_key: true
+      
+      - field: name
+        type: string
+        meta:
+          interface: input
+          required: true
+          options:
+            placeholder: "Student name"
+        schema:
+          max_length: 255
+          is_nullable: false
+      
+      - field: preferences
+        type: json
+        meta:
+          interface: input-code
+          options:
+            language: json
+            placeholder: '{"math_interest": 0.8, "humanities_interest": 0.3}'
+        schema:
+          default_value: {}
+          is_nullable: true
+      
+      - field: career_goal
+        type: string
+        meta:
+          interface: select-dropdown
+          options:
+            choices:
+              - text: "Software Engineer"
+                value: "software_engineer"
+              - text: "Data Scientist"
+                value: "data_scientist"
+              - text: "Researcher"
+                value: "researcher"
+              - text: "Academic"
+                value: "academic"
+              - text: "Engineer"
+                value: "engineer"
+              - text: "Undecided"
+                value: "undecided"
+        schema:
+          max_length: 255
+          is_nullable: true
+      
+      - field: embedding
+        type: json
+        meta:
+          interface: list
+          readonly: true
+          note: "384-dimensional vector for recommendation matching (pgvector)"
+        schema:
+          is_nullable: true
+      
+      - field: created_at
+        type: timestamp
+        meta:
+          interface: datetime
+          readonly: true
+          special:
+            - date-created
+        schema:
+          is_nullable: false
+      
+      - field: updated_at
+        type: timestamp
+        meta:
+          interface: datetime
+          readonly: true
+          special:
+            - date-updated
+        schema:
+          is_nullable: false
+
+  # ============================================
+  # RECOMMENDATIONS COLLECTION
+  # ============================================
+  - collection: recommendations
+    meta:
+      collection: recommendations
+      icon: recommendation
+      note: Course recommendations for students
+      display_template: "{{student_id.name}} → {{course_id.name}} ({{score}})"
+      accountability: all
+    schema:
+      name: recommendations
+      sql: |
+        CREATE TABLE IF NOT EXISTS recommendations (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+          course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+          score FLOAT NOT NULL,
+          rank INTEGER NOT NULL,
+          reason TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(student_id, course_id)
+        );
+        
+        -- Index for student recommendations lookup
+        CREATE INDEX IF NOT EXISTS idx_recommendations_student 
+        ON recommendations(student_id);
+        
+        -- Index for course recommendations lookup
+        CREATE INDEX IF NOT EXISTS idx_recommendations_course 
+        ON recommendations(course_id);
+        
+        -- Index for top recommendations
+        CREATE INDEX IF NOT EXISTS idx_recommendations_score 
+        ON recommendations(student_id, score DESC);
+    fields:
+      - field: id
+        type: uuid
+        meta:
+          interface: input
+          readonly: true
+          required: true
+        schema:
+          is_primary_key: true
+      
+      - field: student_id
+        type: uuid
+        meta:
+          interface: select-dropdown-m2o
+          required: true
+          options:
+            template: "{{name}}"
+        schema:
+          is_nullable: false
+          foreign_key_table: students
+          foreign_key_column: id
+      
+      - field: course_id
+        type: uuid
+        meta:
+          interface: select-dropdown-m2o
+          required: true
+          options:
+            template: "{{name}} ({{department}})"
+        schema:
+          is_nullable: false
+          foreign_key_table: courses
+          foreign_key_column: id
+      
+      - field: score
+        type: float
+        meta:
+          interface: slider
+          required: true
+          options:
+            min: 0.0
+            max: 1.0
+            step: 0.001
+        schema:
+          is_nullable: false
+      
+      - field: rank
+        type: integer
+        meta:
+          interface: input
+          required: true
+          options:
+            min: 1
+        schema:
+          is_nullable: false
+      
+      - field: reason
+        type: text
+        meta:
+          interface: input-multiline
+          options:
+            placeholder: "Why this course was recommended"
+        schema:
+          is_nullable: true
+      
+      - field: created_at
+        type: timestamp
+        meta:
+          interface: datetime
+          readonly: true
+          special:
+            - date-created
+        schema:
+          is_nullable: false
+
+relations:
+  # Course Prerequisites (Self-referencing M2M)
+  - collection: courses
+    field: prerequisites
+    related_collection: courses
+    meta:
+      junction_field: prerequisite_id
+      many_collection: courses_prerequisites
+      many_field: course_id
+      one_deselect_action: nullify
+      one_field: required_for
+      sort_field: sort
+    schema:
+      on_delete: CASCADE
+      constraint_name: courses_prerequisites_course_id_fk
+
+  # Recommendations → Students
+  - collection: recommendations
+    field: student_id
+    related_collection: students
+    meta:
+      one_deselect_action: nullify
+      one_field: recommendations
+    schema:
+      on_delete: CASCADE
+      constraint_name: recommendations_student_id_fk
+
+  # Recommendations → Courses
+  - collection: recommendations
+    field: course_id
+    related_collection: courses
+    meta:
+      one_deselect_action: nullify
+      one_field: recommendations
+    schema:
+      on_delete: CASCADE
+      constraint_name: recommendations_course_id_fk
+
+permissions:
+  # Admin role - full access
+  - collection: courses
+    role: admin
+    action: create
+    permissions:
+      fields: "*"
+  - collection: courses
+    role: admin
+    action: read
+    permissions:
+      fields: "*"
+  - collection: courses
+    role: admin
+    action: update
+    permissions:
+      fields: "*"
+  - collection: courses
+    role: admin
+    action: delete
+    permissions:
+      fields: "*"
+  
+  - collection: students
+    role: admin
+    action: create
+    permissions:
+      fields: "*"
+  - collection: students
+    role: admin
+    action: read
+    permissions:
+      fields: "*"
+  - collection: students
+    role: admin
+    action: update
+    permissions:
+      fields: "*"
+  - collection: students
+    role: admin
+    action: delete
+    permissions:
+      fields: "*"
+  
+  - collection: recommendations
+    role: admin
+    action: create
+    permissions:
+      fields: "*"
+  - collection: recommendations
+    role: admin
+    action: read
+    permissions:
+      fields: "*"
+  - collection: recommendations
+    role: admin
+    action: update
+    permissions:
+      fields: "*"
+  - collection: recommendations
+    role: admin
+    action: delete
+    permissions:
+      fields: "*"
+
+  # Read-only role - can view courses and recommendations
+  - collection: courses
+    role: readonly
+    action: read
+    permissions:
+      fields: "*"
+  - collection: recommendations
+    role: readonly
+    action: read
+    permissions:
+      fields: "*"
+
+# pgvector Configuration Notes
+# ============================
+#
+# After applying schema, enable pgvector:
+# 
+# psql -U directus -d directus -c "CREATE EXTENSION IF NOT EXISTS vector;"
+#
+# For similarity search queries:
+#
+# -- Find similar courses
+# SELECT id, name, embedding <=> $1::vector AS distance
+# FROM courses
+# ORDER BY embedding <=> $1::vector
+# LIMIT 5;
+#
+# -- Find courses for student based on embedding
+# SELECT c.id, c.name, c.embedding <=> s.embedding AS similarity
+# FROM courses c
+# CROSS JOIN students s
+# WHERE s.id = $1
+# ORDER BY c.embedding <=> s.embedding
+# LIMIT 10;

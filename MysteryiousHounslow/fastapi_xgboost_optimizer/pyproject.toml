@@ -1,0 +1,172 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[project]
+name = "fastapi_xgboost_optimizer"
+version = "1.0.0"
+description = "FastAPI orchestration with XGBoost, PyGAD, PostGIS, Google OR-Tools, PyHasura, enforcing hard and soft constraints, ready for production"
+authors = [{name = "Ryan Allan", email = "ryan.allan@example.com"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = ["fastapi", "xgboost", "optimization", "postgis", "or-tools", "pygad"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: FastAPI",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    # FastAPI and ASGI
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "python-multipart>=0.0.6",
+    
+    # Data validation and settings
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    
+    # Removed direct database dependencies - using Hasura GraphQL only
+    
+    # Machine Learning and Optimization
+    "xgboost>=2.0.0",
+    "pygad>=3.2.0",
+    "ortools>=9.8.0",
+    "numpy>=1.26.0",
+    "scipy>=1.12.0",
+    "pandas>=2.2.0",
+    "scikit-learn>=1.4.0",
+    
+    # Spatial and Geometric
+    "shapely>=2.0.0",
+    "geopandas>=0.14.0",
+    
+    # GraphQL and API
+    "gql>=3.4.0",
+    "httpx>=0.26.0",
+    "aiohttp>=3.9.0",
+    
+    # Configuration and Logging
+    "pyyaml>=6.0.1",
+    "python-json-logger>=2.0.0",
+    "structlog>=24.1.0",
+    
+    # Security and Rate Limiting
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "slowapi>=0.1.9",
+    
+    # Utilities
+    "python-dotenv>=1.0.0",
+    "typer>=0.9.0",
+    "rich>=13.7.0",
+    "tenacity>=8.2.0",
+    "celery>=5.3.0",
+    "redis>=5.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "black>=23.12.0",
+    "isort>=5.13.0",
+    "flake8>=7.0.0",
+    "mypy>=1.8.0",
+    "pre-commit>=3.6.0",
+    "factory-boy>=3.3.0",
+    "faker>=22.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/ryanallan/fastapi_xgboost_optimizer"
+Repository = "https://github.com/ryanallan/fastapi_xgboost_optimizer"
+Documentation = "https://fastapi-xgboost-optimizer.readthedocs.io"
+"Bug Tracker" = "https://github.com/ryanallan/fastapi_xgboost_optimizer/issues"
+
+[project.scripts]
+fastapi-optimizer = "app.main:main"
+setup-db = "scripts.setup:main"
+migrate-db = "scripts.migrate:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["app"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "--cov=app",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-fail-under=80"
+]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__init__.py"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]

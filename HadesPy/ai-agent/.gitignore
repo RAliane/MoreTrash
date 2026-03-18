@@ -1,0 +1,125 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+.uv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+logs/
+log/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+artifacts/data.db
+artifacts/embeddings.db
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+
+# Podman / Docker
+*.tar
+*.img
+container-images/
+
+# Secrets
+secrets/
+*.pem
+*.key
+*.crt
+
+# Directus
+uploads/
+extensions/
+
+# Gradio
+.gradio/
+flagged/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Node (for any frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+build/
+dist/
+out/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# ============================================
+# Deployment (Phase 5 additions)
+# ============================================
+.env.production
+.env.staging
+render.yaml.local
+.ssh/
+deploy-keys/
+
+# Render CLI
+.render/
+
+# Local deployment artifacts
+*.tar.gz
+*.zip
+deploy-*.log
+
+# Backup files
+*.bak
+*.backup
+backups/backup-*/
+
+# Cache directories
+.cache/
+__pypackages__/

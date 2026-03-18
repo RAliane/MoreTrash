@@ -1,0 +1,12 @@
+# Matchgorithm Robots.txt
+User-agent: *
+Allow: /
+
+# Disallow private pages
+Disallow: /auth/
+Disallow: /dashboard/
+Disallow: /admin/
+Disallow: /api/
+
+# Sitemap location
+Sitemap: https://www.matchgorithm.co.uk/sitemap.xml

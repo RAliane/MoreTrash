@@ -1,0 +1,465 @@
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_GrayOLED.h>
+#include <Adafruit_SPITFT.h>
+#include <Adafruit_SPITFT_Macros.h>
+#include <gfxfont.h>
+#include <Wire.h>
+#include "WiFi.h"
+#include <MUIU8g2.h>
+#include <U8g2lib.h>
+#include <U8x8lib.h>
+#include <Arduino_JSON.h>
+#include <Adafruit_SSD1306.h>
+#include <splash.h>
+#include <AsyncUDP.h>
+
+const char *ssid = "TheOracle";
+const char *password = "D0y0usp3AK0R4CL353";
+
+// ============================================================================
+// 6 DoF FLIGHT DYNAMICS DEFINITIONS (from sixDoF.c)
+// ============================================================================
+
+// Constants
+#define GRAVITY_ACCEL 9.80665
+#define AIR_DENSITY_SEA_LEVEL 1.225
+#define TEMP_SEA_LEVEL 288.15
+#define PRESSURE_SEA_LEVEL 101325.0
+#define DEFAULT_SPECIFIC_FUEL_CONSUMPTION 0.5
+
+// Quaternion/Vector indices
+#define QUAT_W 0
+#define QUAT_X 1
+#define QUAT_Y 2
+#define QUAT_Z 3
+#define VEC_X 0
+#define VEC_Y 1
+#define VEC_Z 2
+
+// Type definitions
+typedef struct {
+    double pilotMass;
+    double fuelMass;
+    double armamentMass;
+    double airframeMass;
+    double totalMass;
+} MassState;
+
+typedef struct {
+    double maxThrust;
+    double maxFuelFlow;
+    double currentThrust;
+    double currentFuelFlow;
+    double specificFuelConsumption;
+} EngineState;
+
+typedef struct {
+    double wingArea;
+    double coefficientLift;
+    double coefficientDrag;
+} AerodynamicCoefficients;
+
+typedef struct {
+    double velocity[3];
+    double position[3];
+    double orientation[4];
+    double angularVelocity[3];
+} DynamicState;
+
+typedef struct {
+    MassState mass;
+    EngineState engine;
+    AerodynamicCoefficients aero;
+    DynamicState dynamics;
+} AircraftState;
+
+typedef struct {
+    double density;
+    double temperature;
+    double pressure;
+} AtmosphericConditions;
+
+// ============================================================================
+// GLOBAL VARIABLES
+// ============================================================================
+
+AsyncUDP udp;
+AircraftState aircraft;
+AtmosphericConditions atmosphere = {
+    .density = AIR_DENSITY_SEA_LEVEL,
+    .temperature = TEMP_SEA_LEVEL,
+    .pressure = PRESSURE_SEA_LEVEL
+};
+
+unsigned long lastTelemetryTime = 0;
+const unsigned long TELEMETRY_INTERVAL = 100; // Send telemetry every 100ms
+const double TIME_STEP = 0.01; // 10ms physics step
+
+// ============================================================================
+// UTILITY FUNCTIONS - VECTOR OPERATIONS
+// ============================================================================
+
+double vectorMagnitude(const double *vec) {
+    return sqrt(vec[VEC_X] * vec[VEC_X] + 
+                vec[VEC_Y] * vec[VEC_Y] + 
+                vec[VEC_Z] * vec[VEC_Z]);
+}
+
+double clamp(double value, double minVal, double maxVal) {
+    if (value < minVal) return minVal;
+    if (value > maxVal) return maxVal;
+    return value;
+}
+
+// ============================================================================
+// QUATERNION OPERATIONS
+// ============================================================================
+
+void quaternionNormalize(double *q) {
+    double norm = sqrt(q[QUAT_W] * q[QUAT_W] + 
+                      q[QUAT_X] * q[QUAT_X] + 
+                      q[QUAT_Y] * q[QUAT_Y] + 
+                      q[QUAT_Z] * q[QUAT_Z]);
+    
+    if (norm > 1e-10) {
+        for (int i = 0; i < 4; i++) {
+            q[i] /= norm;
+        }
+    }
+}
+
+void quaternionUpdateEuler(double *q, const double *angularVel, double deltaTime) {
+    double dq[4];
+    
+    dq[QUAT_W] = 0.5 * (-q[QUAT_X] * angularVel[0] - 
+                         q[QUAT_Y] * angularVel[1] - 
+                         q[QUAT_Z] * angularVel[2]);
+    
+    dq[QUAT_X] = 0.5 * ( q[QUAT_W] * angularVel[0] + 
+                         q[QUAT_Y] * angularVel[2] - 
+                         q[QUAT_Z] * angularVel[1]);
+    
+    dq[QUAT_Y] = 0.5 * ( q[QUAT_W] * angularVel[1] - 
+                         q[QUAT_X] * angularVel[2] + 
+                         q[QUAT_Z] * angularVel[0]);
+    
+    dq[QUAT_Z] = 0.5 * ( q[QUAT_W] * angularVel[2] + 
+                         q[QUAT_X] * angularVel[1] - 
+                         q[QUAT_Y] * angularVel[0]);
+    
+    for (int i = 0; i < 4; i++) {
+        q[i] += dq[i] * deltaTime;
+    }
+    
+    quaternionNormalize(q);
+}
+
+// ============================================================================
+// ATMOSPHERIC MODEL
+// ============================================================================
+
+void atmosphereUpdateByAltitude(double altitudeMeters) {
+    const double tempLapseRate = 0.0065;
+    
+    atmosphere.temperature = TEMP_SEA_LEVEL - (tempLapseRate * altitudeMeters);
+    
+    double exponent = -(GRAVITY_ACCEL * altitudeMeters) / (287.05 * atmosphere.temperature);
+    atmosphere.pressure = PRESSURE_SEA_LEVEL * exp(exponent);
+    
+    atmosphere.density = atmosphere.pressure / (287.05 * atmosphere.temperature);
+}
+
+// ============================================================================
+// MASS MANAGEMENT
+// ============================================================================
+
+void massRecalculateTotal(MassState *mass) {
+    mass->totalMass = mass->pilotMass + mass->fuelMass + 
+                     mass->armamentMass + mass->airframeMass;
+}
+
+void massConsumeFuel(MassState *mass, double fuelFlowRate, double deltaTime) {
+    double fuelBurned = fuelFlowRate * deltaTime;
+    mass->fuelMass -= fuelBurned;
+    
+    if (mass->fuelMass < 0.0) {
+        mass->fuelMass = 0.0;
+    }
+    
+    massRecalculateTotal(mass);
+}
+
+// ============================================================================
+// ENGINE MODEL
+// ============================================================================
+
+void engineUpdateThrottle(EngineState *engine, double throttleCommand) {
+    throttleCommand = clamp(throttleCommand, 0.0, 1.0);
+    
+    engine->currentThrust = throttleCommand * engine->maxThrust;
+    engine->currentFuelFlow = throttleCommand * engine->maxFuelFlow;
+}
+
+// ============================================================================
+// AERODYNAMIC FORCE CALCULATIONS
+// ============================================================================
+
+double aeroCalculateLift(double airspeedMs, double wingAreaM2, 
+                        double coefficientLift, double densityKgM3) {
+    double velocitySquared = airspeedMs * airspeedMs;
+    return 0.5 * densityKgM3 * velocitySquared * wingAreaM2 * coefficientLift;
+}
+
+double aeroCalculateDrag(double airspeedMs, double wingAreaM2, 
+                        double coefficientDrag, double densityKgM3) {
+    double velocitySquared = airspeedMs * airspeedMs;
+    return 0.5 * densityKgM3 * velocitySquared * wingAreaM2 * coefficientDrag;
+}
+
+double aeroCalculateWeight(double massKg) {
+    return massKg * GRAVITY_ACCEL;
+}
+
+// ============================================================================
+// POSITION AND VELOCITY INTEGRATION
+// ============================================================================
+
+void positionUpdate(double *position, const double *velocity, double deltaTime) {
+    for (int i = 0; i < 3; i++) {
+        position[i] += velocity[i] * deltaTime;
+    }
+}
+
+void velocityUpdate(double *velocity, const double *acceleration, double deltaTime) {
+    for (int i = 0; i < 3; i++) {
+        velocity[i] += acceleration[i] * deltaTime;
+    }
+}
+
+// ============================================================================
+// CONTROL (Placeholder)
+// ============================================================================
+
+double controlGetThrottleCommand() {
+    // Returns a variable throttle for testing - can be modified
+    // For now, ramps up over time
+    static unsigned long startTime = 0;
+    if (startTime == 0) startTime = millis();
+    
+    double elapsed = (millis() - startTime) / 1000.0;
+    double throttle = 0.3 + 0.2 * sin(elapsed * 0.5); // Oscillate between 0.1 and 0.5
+    return clamp(throttle, 0.0, 1.0);
+}
+
+// ============================================================================
+// MAIN FLIGHT DYNAMICS STEP
+// ============================================================================
+
+void flightDynamicsStep(double deltaTime) {
+    // Get throttle command
+    double throttleCommand = controlGetThrottleCommand();
+    
+    // Update engine
+    engineUpdateThrottle(&aircraft.engine, throttleCommand);
+    
+    // Update mass due to fuel consumption
+    massConsumeFuel(&aircraft.mass, aircraft.engine.currentFuelFlow, deltaTime);
+    
+    // Calculate airspeed
+    double airspeed = vectorMagnitude(aircraft.dynamics.velocity);
+    
+    // Calculate aerodynamic forces
+    double liftForce = aeroCalculateLift(airspeed, aircraft.aero.wingArea, 
+                                        aircraft.aero.coefficientLift, 
+                                        atmosphere.density);
+    
+    double dragForce = aeroCalculateDrag(airspeed, aircraft.aero.wingArea, 
+                                        aircraft.aero.coefficientDrag, 
+                                        atmosphere.density);
+    
+    double weightForce = aeroCalculateWeight(aircraft.mass.totalMass);
+    
+    // Calculate net forces
+    double thrustMinusDrag = aircraft.engine.currentThrust - dragForce;
+    double netVerticalForce = liftForce - weightForce;
+    
+    // Calculate accelerations
+    double accelerationX = thrustMinusDrag / aircraft.mass.totalMass;
+    double accelerationZ = netVerticalForce / aircraft.mass.totalMass;
+    
+    double acceleration[3] = {accelerationX, 0.0, accelerationZ};
+    
+    // Update dynamics
+    velocityUpdate(aircraft.dynamics.velocity, acceleration, deltaTime);
+    positionUpdate(aircraft.dynamics.position, aircraft.dynamics.velocity, deltaTime);
+    quaternionUpdateEuler(aircraft.dynamics.orientation, 
+                         aircraft.dynamics.angularVelocity, deltaTime);
+}
+
+// ============================================================================
+// AIRCRAFT INITIALIZATION
+// ============================================================================
+
+void aircraftStateInitialize() {
+    // Mass components
+    aircraft.mass.pilotMass = 100.0;
+    aircraft.mass.fuelMass = 50.0;
+    aircraft.mass.armamentMass = 20.0;
+    aircraft.mass.airframeMass = 500.0;
+    massRecalculateTotal(&aircraft.mass);
+    
+    // Engine
+    aircraft.engine.maxThrust = 50000.0;
+    aircraft.engine.maxFuelFlow = 2.0;
+    aircraft.engine.currentThrust = 0.0;
+    aircraft.engine.currentFuelFlow = 0.0;
+    aircraft.engine.specificFuelConsumption = DEFAULT_SPECIFIC_FUEL_CONSUMPTION;
+    
+    // Aerodynamics
+    aircraft.aero.wingArea = 25.0;
+    aircraft.aero.coefficientLift = 0.4;
+    aircraft.aero.coefficientDrag = 0.02;
+    
+    // Dynamics - all zeros
+    memset(aircraft.dynamics.velocity, 0, sizeof(aircraft.dynamics.velocity));
+    memset(aircraft.dynamics.position, 0, sizeof(aircraft.dynamics.position));
+    memset(aircraft.dynamics.angularVelocity, 0, sizeof(aircraft.dynamics.angularVelocity));
+    
+    // Quaternion identity
+    aircraft.dynamics.orientation[QUAT_W] = 1.0;
+    aircraft.dynamics.orientation[QUAT_X] = 0.0;
+    aircraft.dynamics.orientation[QUAT_Y] = 0.0;
+    aircraft.dynamics.orientation[QUAT_Z] = 0.0;
+}
+
+// ============================================================================
+// TELEMETRY SERIALIZATION
+// ============================================================================
+
+JSONVar createTelemetryJSON() {
+    JSONVar data;
+    
+    // Position
+    data["pos_x"] = aircraft.dynamics.position[VEC_X];
+    data["pos_y"] = aircraft.dynamics.position[VEC_Y];
+    data["pos_z"] = aircraft.dynamics.position[VEC_Z];
+    
+    // Velocity
+    data["vel_x"] = aircraft.dynamics.velocity[VEC_X];
+    data["vel_y"] = aircraft.dynamics.velocity[VEC_Y];
+    data["vel_z"] = aircraft.dynamics.velocity[VEC_Z];
+    data["airspeed"] = vectorMagnitude(aircraft.dynamics.velocity);
+    
+    // Orientation (Quaternion)
+    data["q_w"] = aircraft.dynamics.orientation[QUAT_W];
+    data["q_x"] = aircraft.dynamics.orientation[QUAT_X];
+    data["q_y"] = aircraft.dynamics.orientation[QUAT_Y];
+    data["q_z"] = aircraft.dynamics.orientation[QUAT_Z];
+    
+    // Engine
+    data["thrust"] = aircraft.engine.currentThrust;
+    data["fuel_flow"] = aircraft.engine.currentFuelFlow;
+    data["throttle"] = aircraft.engine.currentThrust / aircraft.engine.maxThrust;
+    
+    // Mass
+    data["fuel_mass"] = aircraft.mass.fuelMass;
+    data["total_mass"] = aircraft.mass.totalMass;
+    
+    // Atmosphere
+    data["altitude"] = aircraft.dynamics.position[VEC_Z];
+    data["air_density"] = atmosphere.density;
+    
+    return data;
+}
+
+void sendTelemetry() {
+    JSONVar telemetryData = createTelemetryJSON();
+    String jsonString = JSON.stringify(telemetryData);
+    
+    udp.print(jsonString);
+    
+    Serial.print("Telemetry sent: ");
+    Serial.println(jsonString);
+}
+
+// ============================================================================
+// SETUP
+// ============================================================================
+
+void setup() {
+    Serial.begin(115200);
+    delay(1000);
+    
+    // Initialize aircraft dynamics
+    aircraftStateInitialize();
+    
+    Serial.println("\n\nStarting ESP32 6DoF UDP Client...");
+    
+    // WiFi connection
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, password);
+    
+    Serial.print("Connecting to WiFi");
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+        delay(500);
+        Serial.print(".");
+        attempts++;
+    }
+    
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("\nWiFi Failed");
+        while (1) delay(1000);
+    }
+    
+    Serial.println("\nWiFi connected");
+    Serial.print("ESP32 IP: ");
+    Serial.println(WiFi.localIP());
+    
+    // UDP connection to server
+    if (udp.connect(IPAddress(192, 168, 1, 100), 1234)) {
+        Serial.println("UDP connected to server");
+        
+        // Set up packet receive handler
+        udp.onPacket([](AsyncUDPPacket packet) {
+            Serial.print("Received from server: ");
+            Serial.write(packet.data(), packet.length());
+            Serial.println();
+        });
+        
+        // Send initial handshake
+        udp.print("6DoF Client Ready");
+    } else {
+        Serial.println("UDP connection failed");
+        while (1) delay(1000);
+    }
+}
+
+// ============================================================================
+// MAIN LOOP
+// ============================================================================
+
+void loop() {
+    unsigned long currentTime = millis();
+    static unsigned long lastPhysicsTime = 0;
+    
+    // Run physics at fixed timestep
+    if (currentTime - lastPhysicsTime >= (TIME_STEP * 1000)) {
+        // Update atmosphere based on altitude
+        atmosphereUpdateByAltitude(aircraft.dynamics.position[VEC_Z]);
+        
+        // Run flight dynamics step
+        flightDynamicsStep(TIME_STEP);
+        
+        lastPhysicsTime = currentTime;
+    }
+    
+    // Send telemetry at slower rate
+    if (currentTime - lastTelemetryTime >= TELEMETRY_INTERVAL) {
+        sendTelemetry();
+        lastTelemetryTime = currentTime;
+    }
+    
+    delay(1); // Prevent watchdog timeout
+}

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matchgorithm - AI-Powered Matching Platform</title>
+    <meta name="description" content="Matchgorithm uses advanced AI and evolutionary algorithms to provide optimized matching for professionals, talent, and opportunities.">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="Matchgorithm - AI-Powered Matching Platform">
+    <meta property="og:description" content="Connect professionals, talent, and opportunities with unprecedented accuracy.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://matchgorithm.co.uk">
+    <meta property="og:image" content="https://matchgorithm.co.uk/og-image.png">
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Matchgorithm - AI-Powered Matching Platform">
+    <meta name="twitter:description" content="Connect professionals, talent, and opportunities with unprecedented accuracy.">
+    
+    <!-- Favicon -->
+    <link rel="icon" href="/public/favicon.ico" type="image/x-icon">
+    <link rel="icon" href="/public/icon.svg" type="image/svg+xml">
+    
+    <!-- Tailwind CSS via CDN (replace with compiled CSS in production) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        background: '#020617',
+                        foreground: '#f8fafc',
+                        card: '#0f172a',
+                        'card-foreground': '#f8fafc',
+                        primary: '#3b82f6',
+                        'primary-foreground': '#ffffff',
+                        secondary: '#1e293b',
+                        'secondary-foreground': '#f8fafc',
+                        muted: '#1e293b',
+                        'muted-foreground': '#94a3b8',
+                        accent: '#1e293b',
+                        'accent-foreground': '#f8fafc',
+                        destructive: '#ef4444',
+                        'destructive-foreground': '#ffffff',
+                        border: '#1e293b',
+                        input: '#1e293b',
+                        ring: '#3b82f6',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                },
+            },
+        }
+    </script>
+    
+    <!-- Custom styles -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background-color: #020617;
+            color: #f8fafc;
+        }
+        
+        /* Smooth scrolling */
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        /* Focus styles */
+        *:focus-visible {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
+        }
+        
+        /* Loading spinner */
+        .spinner {
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+    
+    <!-- Dioxus WASM -->
+    <script type="module">
+        import init from '/assets/matchgorithm.js';
+        init('/assets/matchgorithm_bg.wasm').then(() => {
+            console.log('Matchgorithm WASM loaded');
+        }).catch(err => {
+            console.error('Failed to load WASM:', err);
+        });
+    </script>
+</head>
+<body class="bg-background text-foreground font-sans antialiased min-h-screen">
+    <!-- App mounts here -->
+    <div id="main"></div>
+    
+    <!-- No-JS fallback -->
+    <noscript>
+        <div style="padding: 2rem; text-align: center;">
+            <h1>JavaScript Required</h1>
+            <p>Please enable JavaScript to use Matchgorithm.</p>
+        </div>
+    </noscript>
+</body>
+</html>

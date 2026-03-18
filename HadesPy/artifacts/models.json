@@ -1,0 +1,14 @@
+{
+  "collections": [
+    {
+      "collection": "messages",
+      "meta": { "icon": "chat" },
+      "schema": { "name": "messages" }
+    },
+    {
+      "collection": "memory_chunks",
+      "meta": { "icon": "storage" },
+      "schema": { "name": "memory_chunks" }
+    }
+  ]
+}

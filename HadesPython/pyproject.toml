@@ -1,0 +1,14 @@
+[project]
+name = "hadespython"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "cognee>=0.5.2",
+    "directus-sdk-py>=1.1.0",
+    "fastapi>=0.128.7",
+    "polars>=1.38.1",
+    "sentence-transformers>=5.2.2",
+    "uvicorn>=0.40.0",
+]
